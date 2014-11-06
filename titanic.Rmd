@@ -2,22 +2,24 @@
 title: 'Titanic: Machine Learning from Disaster -- a Kaggle competition entry'
 author: "Sizhan Shi"
 date: "November 5, 2014"
-output: html_document
+output: 
+    html_document:
+        theme: journal
+        highlight: kate
+
 ---
 
 ## Background  
-This is an entry for the kaggle machine learning competition "Titanic: Machine Learning from Disaster".  
-
-Link:  https://www.kaggle.com/c/titanic-gettingStarted  
+This is an entry for the kaggle machine learning competition [Titanic: Machine Learning from Disaster](https://www.kaggle.com/c/titanic-gettingStarted)
 
 #### Introduction from kaggle's website:  
-The sinking of the RMS Titanic is one of the most infamous shipwrecks in history.  On April 15, 1912, during her maiden voyage, the Titanic sank after colliding with an iceberg, killing 1502 out of 2224 passengers and crew. This sensational tragedy shocked the international community and led to better safety regulations for ships.  
+> The sinking of the RMS Titanic is one of the most infamous shipwrecks in history.  On April 15, 1912, during her maiden voyage, the Titanic sank after colliding with an iceberg, killing 1502 out of 2224 passengers and crew. This sensational tragedy shocked the international community and led to better safety regulations for ships.  
 
-One of the reasons that the shipwreck led to such loss of life was that there were not enough lifeboats for the passengers and crew. Although there was some element of luck involved in surviving the sinking, some groups of people were more likely to survive than others, such as women, children, and the upper-class.  
+> One of the reasons that the shipwreck led to such loss of life was that there were not enough lifeboats for the passengers and crew. Although there was some element of luck involved in surviving the sinking, some groups of people were more likely to survive than others, such as women, children, and the upper-class.  
 
-In this challenge, we ask you to complete the analysis of what sorts of people were likely to survive. In particular, we ask you to apply the tools of machine learning to predict which passengers survived the tragedy.  
+> In this challenge, we ask you to complete the analysis of what sorts of people were likely to survive. In particular, we ask you to apply the tools of machine learning to predict which passengers survived the tragedy.  
 
-This Kaggle "Getting Started" Competition provides an ideal starting place for people who may not have a lot of experience in data science and machine learning. The data is highly structured, and we provide tutorials of increasing complexity for using Excel, Python, pandas in Python, and a Random Forest in Python (see links in the sidebar). We also have links to tutorials using R instead. Please use the forums freely and as much as you like. There is no such thing as a stupid question; we guarantee someone else will be wondering the same thing!  
+> This Kaggle "Getting Started" Competition provides an ideal starting place for people who may not have a lot of experience in data science and machine learning. The data is highly structured, and we provide tutorials of increasing complexity for using Excel, Python, pandas in Python, and a Random Forest in Python (see links in the sidebar). We also have links to tutorials using R instead. Please use the forums freely and as much as you like. There is no such thing as a stupid question; we guarantee someone else will be wondering the same thing!  
 
 #### Method:  
 1. Load the data  
@@ -41,13 +43,134 @@ http://trevorstephens.com/post/72920580937/titanic-getting-started-with-r-part-2
 
 #### Load the data
 ```{r}
+train <- read.csv("train.csv")
+head(train)
+## how many observations 
+nrow(train)
+## how many features
+ncol(train)
+## how many survived and their percentage
+nrow(train[train$Survived==1,]) / nrow(train)
+```
+About 38.4% of passengers survived. Let's examine survival rate in relationship to passengers' demographic attributes. First, start with age and survival rate.  
+```{r, fig.height=4, fig.width=6}
+
+library(ggplot2)
+ggplot(train, aes(as.factor(Survived),Age)) + geom_boxplot() + theme_bw()
+```  
+From a galance, there doens't seem to have a strong difference in age between survivors and victims. Let's look at sex next.  
+
+```{r, fig.height=4, fig.width=6}
+table(train$Sex)
+table(train$Sex, train$Survived)  
+##  seems like females are more likely to sruvive, let's look at the proportions:
+prop.table(table(train$Sex, train$Survived), 1)
+```  
+74% of females survived, versus only 19% for males.   
+
+Now let's get back to the ages.  
+```{r}
+summary(train$Age)
+## there are several NAs. Let's clean them up by replacing them with the average age of all passengers  
+yesAge <- train[!is.na(train$Age),]
+train[is.na(train$Age),"Age"] <- mean(yesAge$Age)
+```  
+Here, the assumption is that women and children had priority access to lifeboats and life vests. The question is how young should a child be to be considered eligible for that treatment? Let's use a for loop, starting from the age 18, and compare the difference of the survival rates between boys and girls, if we found an age group with almost equal survival rate between both genders, we have found the threadshold.  
+
+```{r}
+for (i in 2:18) {
+    ageTemp <- subset(train, Age < i)
+    prop.table(table(ageTemp$Sex, ageTemp$Survived),1)
+    diff <- prop.table(table(ageTemp$Sex, ageTemp$Survived),1)[1,2]-prop.table(table(ageTemp$Sex, ageTemp$Survived),1)[2,2]
+    print(paste("Age", i, "survival diff: ", diff))
+}
 
 ```
+It seems like age 15 is the threashold -- younger than 15, regardless boy or girl, the person was considered a child and given priority; older than 15, the person was considered an adult, a woman or a man, and was treated accordingly. 
 
-You can also embed plots, for example:
+```{r}
+age15 <- subset(train, Age < 15)
+table(age15$Sex, age15$Survived)
+prop.table(table(age15$Sex, age15$Survived), 1)
+```  
+Children younger than 15 had a survival rate higher than 54%, much better than the average of 38%. Now let's look at class and fare.  
 
-```{r, echo=FALSE}
-plot(cars)
+```{r}
+table(train$Pclass, train$Survived)
+prop.table(table(train$Pclass, train$Survived),1)
+## it seems that the higher the class, the more likely to survive; the hypothesis is that class was associated to social status.
+cor(train$Pclass, train$Survived)
+lm(train$Pclass ~ train$Survived)
+##  a linear regression is detected with correlation -0.33.
+```  
+
+If class level is associated to social status, and thus associated to survival rate, let's compare class level to the fare to see if we can find anything new.   
+
+```{r, fig.height=4, fig.width=6}
+hist(train$Fare)
+```    
+
+Majority of the passengers purchased a ticket cheaper than $100; how many passengers actually purchased an expensive ticket?  
+
+```{r}
+nrow(subset(train, Fare >= 100)) / nrow(train)
+nrow(subset(train, Fare >= 100))
+```
+6%, or 53 passengers purchased an expensive ticket. Did they have better survival rate, since they were likely well-off, thus likely with higher social status?  
+
+```{r}
+ballerz <- subset(train, Fare >= 100)
+prop.table(table(ballerz$Survived))
+```
+Yes, passengers able to afford an expensive ticket (>$100) had a survival rate of 74%, much higher than average, even much higher than the survival rate of children.   
+
+Now just to confirm -- did those wealthy passengers all stayed at higher classes?  
+
+```{r}
+table(ballerz$Pclass)
+``` 
+
+Yes, all of them were riding first class.  
+
+#### Learnings so far:  
+1. Females had higher survival rate than men;  
+2. Children under the age of 15 had higher survival rate than average, regardless of gender;  
+3. Passengers with a ticket fare higher than $100 mostly survived;  
+
+We can apply those learnings to our next submission.  
+
+First, assume all children under the age of 15 survived.  
+```{r}
+test <- read.csv("test.csv")
+## create a column "Survived"
+test$Survived <- 0
+test[test$Age < 15 & !is.na(test$Age),]$Survived <- 1
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+Second, among those older than 15, find the ones that paid more than $100 for their fare and assume them survived.  
+
+```{r}
+test[test$Survived == 0 & test$Fare > 100 & !is.na(test$Fare),]$Survived <- 1
+```
+
+Finally, among the rest of the passengers, assume all women survived.  
+
+```{r}
+test[test$Survived == 0 & test$Sex == "female",]$Survived <- 1
+```
+
+Now we have the final prediction for this round, let's clean it up and upload.  
+
+```{r}
+result1 <- subset(test, select=c(PassengerId, Survived))
+```
+
+
+
+
+
+
+
+
+
+
