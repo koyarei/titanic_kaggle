@@ -64,13 +64,13 @@ head(train)
 ## 4        Futrelle, Mrs. Jacques Heath (Lily May Peel) female  35     1
 ## 5                            Allen, Mr. William Henry   male  35     0
 ## 6                                    Moran, Mr. James   male  NA     0
-##   Parch           Ticket   Fare Cabin Embarked
-## 1     0        A/5 21171  7.250              S
-## 2     0         PC 17599 71.283   C85        C
-## 3     0 STON/O2. 3101282  7.925              S
-## 4     0           113803 53.100  C123        S
-## 5     0           373450  8.050              S
-## 6     0           330877  8.458              Q
+##   Parch           Ticket    Fare Cabin Embarked
+## 1     0        A/5 21171  7.2500              S
+## 2     0         PC 17599 71.2833   C85        C
+## 3     0 STON/O2. 3101282  7.9250              S
+## 4     0           113803 53.1000  C123        S
+## 5     0           373450  8.0500              S
+## 6     0           330877  8.4583              Q
 ```
 
 ```r
@@ -97,7 +97,7 @@ nrow(train[train$Survived==1,]) / nrow(train)
 ```
 
 ```
-## [1] 0.3838
+## [1] 0.3838384
 ```
 
 About 38.4% of passengers survived. Let's examine survival rate in relationship to passengers' demographic attributes. First, start with age and survival rate.  
@@ -111,7 +111,7 @@ ggplot(train, aes(as.factor(Survived),Age)) + geom_boxplot() + theme_bw()
 ## Warning: Removed 177 rows containing non-finite values (stat_boxplot).
 ```
 
-![plot of chunk unnamed-chunk-2](figure/unnamed-chunk-2.png) 
+![plot of chunk unnamed-chunk-2](figure/unnamed-chunk-2-1.png) 
 
 From a galance, there doens't seem to have a strong difference in age between survivors and victims. Let's look at sex next.  
 
@@ -146,9 +146,9 @@ prop.table(table(train$Sex, train$Survived), 1)
 
 ```
 ##         
-##               0      1
-##   female 0.2580 0.7420
-##   male   0.8111 0.1889
+##                  0         1
+##   female 0.2579618 0.7420382
+##   male   0.8110919 0.1889081
 ```
 74% of females survived, versus only 19% for males.  
 
@@ -169,7 +169,7 @@ summary(train$Age)
 
 ```
 ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
-##    0.42   20.10   28.00   29.70   38.00   80.00     177
+##    0.42   20.12   28.00   29.70   38.00   80.00     177
 ```
 
 ```r
@@ -194,7 +194,7 @@ rate * 109
 ```
 
 ```
-## [1] 74.19
+## [1] 74.19328
 ```
 
 We should have about 74 children in our training dataset. Let's verify that with our 15 thredshold.  
@@ -261,9 +261,9 @@ prop.table(table(age15$Sex, age15$Survived), 1)
 
 ```
 ##         
-##               0      1
-##   female 0.3846 0.6154
-##   male   0.4615 0.5385
+##                  0         1
+##   female 0.3846154 0.6153846
+##   male   0.4615385 0.5384615
 ```
 Children younger than 15 had a survival rate higher than 54%, much better than the average of 38%. Let's assign this level to the passengers.  
 
@@ -606,7 +606,7 @@ library(RColorBrewer)
 fancyRpartPlot(fit)
 ```
 
-![plot of chunk unnamed-chunk-19](figure/unnamed-chunk-19.png) 
+![plot of chunk unnamed-chunk-19](figure/unnamed-chunk-19-1.png) 
 
 ```r
 Prediction <- predict(fit, test, type = "class")
@@ -626,7 +626,7 @@ fit <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked, da
 fancyRpartPlot(fit)
 ```
 
-![plot of chunk unnamed-chunk-20](figure/unnamed-chunk-20.png) 
+![plot of chunk unnamed-chunk-20](figure/unnamed-chunk-20-1.png) 
 
 ```r
 Prediction <- predict(fit, test, type = "class")
@@ -762,7 +762,7 @@ train <- combi[1:891,]
 test <- combi[892:nrow(combi),]
 ```
 
-#### Round 5 submission.  
+#### Round 6 submission.  
 Do another rpart fit with new factors.  
 
 
@@ -774,7 +774,7 @@ fit <- rpart(Survived ~ Pclass + Sex + Age + Child + SibSp + Parch + Fare + Emba
 fancyRpartPlot(fit)
 ```
 
-![plot of chunk unnamed-chunk-29](figure/unnamed-chunk-29.png) 
+![plot of chunk unnamed-chunk-29](figure/unnamed-chunk-29-1.png) 
 
 ```r
 Prediction <- predict(fit, test, type = "class")
@@ -782,8 +782,339 @@ result5 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
 write.csv(result5, "result5.csv", row.names=F)
 ```
 
-#### Round 5 submission result.  
+#### Round 6 submission result.  
 Score improved by 0.01914, accuracy at 0.80383.  
+
+### Random Forests  
+
+First, before we jump into Random Forests model creation, let's use rpart decision tree to predict the age, instead of using the average age.  
+
+
+```r
+## create combi data frame from scratch
+###############################
+test <- read.csv("test.csv")
+train <- read.csv("train.csv")
+test$Survived <- NA
+combi <- rbind(train, test)
+
+combi$Name <- as.character(combi$Name)
+library(stringr)
+cleanTitle <- function(x) {
+    nameSplit <- str_trim(strsplit(x, ",")[[1]][2])
+    nameSplitClean <- strsplit(nameSplit, "\\.")[[1]][1]
+    nameSplitClean
+}
+
+combi$Title <- sapply(combi$Name, cleanTitle)
+
+combi[combi$Title %in% c("Capt", "Col", "Major", "Sir", "Dr"),]$Title <- "Sir"
+combi[combi$Title %in% c("Don", "Mr"),]$Title <- "Mr"
+combi[combi$Title %in% c("Dona", "Miss", "Mlle"),]$Title <- "Miss"
+combi[combi$Title %in% c("Mrs", "Mme", "Ms"),]$Title <- "Mrs"
+combi[combi$Title %in% c("Master", "Jonkheer"),]$Title <- "Master"
+combi[combi$Title %in% c("Lady", "the Countess"),]$Title <- "Lady"
+
+combi$Fam.Size <- combi$Parch + combi$SibSp + 1
+## create a new factor that is the traveler's last name.
+combi$Last.Name <- as.character(combi$Name)
+
+getLast.Name <- function(x) {
+    Last.Name <- str_trim(strsplit(x, ",")[[1]][1])
+    Last.Name
+}
+
+combi$Last.Name <- sapply(combi$Name, getLast.Name)
+
+combi$Fam.Id <- paste0(combi$Fam.Size, combi$Last.Name)
+Fam.Id <- data.frame(table(combi$Fam.Id))
+Fam.Id <- Fam.Id[order(-Fam.Id[,2]),]
+
+Fam.IdSmall <- subset(Fam.Id, Freq < 3)
+combi[combi$Fam.Id %in% Fam.IdSmall$Var1,]$Fam.Id <- "Small"
+combi$Fam.Id <- as.factor(combi$Fam.Id)
+
+################################
+## use rpart to predict age 
+hasAge <- combi[!is.na(combi$Age),]
+noAge <- combi[is.na(combi$Age),]
+library(rpart)
+ageFit <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked
+             + Title, 
+             data=hasAge, method="anova")
+combi[is.na(combi$Age),]$Age <- predict(ageFit, noAge)
+## add Child factor
+combi$Child <- 0
+combi[combi$Age < 15,]$Child <- 1
+```
+
+Make sure there is no NAs in any factors.  
+
+
+```r
+summary(combi)
+```
+
+```
+##   PassengerId      Survived          Pclass          Name          
+##  Min.   :   1   Min.   :0.0000   Min.   :1.000   Length:1309       
+##  1st Qu.: 328   1st Qu.:0.0000   1st Qu.:2.000   Class :character  
+##  Median : 655   Median :0.0000   Median :3.000   Mode  :character  
+##  Mean   : 655   Mean   :0.3838   Mean   :2.295                     
+##  3rd Qu.: 982   3rd Qu.:1.0000   3rd Qu.:3.000                     
+##  Max.   :1309   Max.   :1.0000   Max.   :3.000                     
+##                 NA's   :418                                        
+##      Sex           Age            SibSp            Parch      
+##  female:466   Min.   : 0.17   Min.   :0.0000   Min.   :0.000  
+##  male  :843   1st Qu.:22.00   1st Qu.:0.0000   1st Qu.:0.000  
+##               Median :28.86   Median :0.0000   Median :0.000  
+##               Mean   :29.70   Mean   :0.4989   Mean   :0.385  
+##               3rd Qu.:36.50   3rd Qu.:1.0000   3rd Qu.:0.000  
+##               Max.   :80.00   Max.   :8.0000   Max.   :9.000  
+##                                                               
+##       Ticket          Fare                     Cabin      Embarked
+##  CA. 2343:  11   Min.   :  0.000                  :1014    :  2   
+##  1601    :   8   1st Qu.:  7.896   C23 C25 C27    :   6   C:270   
+##  CA 2144 :   8   Median : 14.454   B57 B59 B63 B66:   5   Q:123   
+##  3101295 :   7   Mean   : 33.295   G6             :   5   S:914   
+##  347077  :   7   3rd Qu.: 31.275   B96 B98        :   4           
+##  347082  :   7   Max.   :512.329   C22 C26        :   4           
+##  (Other) :1261   NA's   :1         (Other)        : 271           
+##     Title              Fam.Size       Last.Name                Fam.Id    
+##  Length:1309        Min.   : 1.000   Length:1309        Small     :1017  
+##  Class :character   1st Qu.: 1.000   Class :character   11Sage    :  11  
+##  Mode  :character   Median : 1.000   Mode  :character   7Andersson:   9  
+##                     Mean   : 1.884                      8Goodwin  :   8  
+##                     3rd Qu.: 2.000                      7Asplund  :   7  
+##                     Max.   :11.000                      6Fortune  :   6  
+##                                                         (Other)   : 251  
+##      Child        
+##  Min.   :0.00000  
+##  1st Qu.:0.00000  
+##  Median :0.00000  
+##  Mean   :0.09244  
+##  3rd Qu.:0.00000  
+##  Max.   :1.00000  
+## 
+```
+
+```r
+## there are two missing values in Embarked. Let's examine this factor.
+combi[order(combi$Ticket),c("Ticket", "Embarked")][40:63,]
+```
+
+```
+##      Ticket Embarked
+## 1110 113503        C
+## 1299 113503        C
+## 167  113505        S
+## 357  113505        S
+## 55   113509        C
+## 918  113509        C
+## 352  113510        S
+## 253  113514        S
+## 62   113572         
+## 830  113572         
+## 391  113760        S
+## 436  113760        S
+## 764  113760        S
+## 803  113760        S
+## 186  113767        S
+## 749  113773        S
+## 1074 113773        S
+## 152  113776        S
+## 337  113776        S
+## 298  113781        S
+## 306  113781        S
+## 499  113781        S
+## 709  113781        S
+## 1033 113781        S
+```
+
+```r
+## based on the ticket number, it's almost confirmed that these two passengers embarked from S.
+combi[combi$Embarked == "",]$Embarked <- "S"
+## There is one passenger with Fare missing. Let's examine that.
+combi[is.na(combi$Fare),]
+```
+
+```
+##      PassengerId Survived Pclass               Name  Sex  Age SibSp Parch
+## 1044        1044       NA      3 Storey, Mr. Thomas male 60.5     0     0
+##      Ticket Fare Cabin Embarked Title Fam.Size Last.Name Fam.Id Child
+## 1044   3701   NA              S    Mr        1    Storey  Small     0
+```
+
+```r
+##  examine ticket prices similar to his ticket number
+ticket <- data.frame(combi)
+ticket$Ticket <- as.integer(as.character(combi$Ticket))
+```
+
+```
+## Warning: NAs introduced by coercion
+```
+
+```r
+subset(ticket, Ticket > 2800 & Ticket < 4200)
+```
+
+```
+##      PassengerId Survived Pclass
+## 54            54        1      2
+## 114          114        0      3
+## 177          177        0      3
+## 230          230        0      3
+## 403          403        0      3
+## 410          410        0      3
+## 478          478        0      3
+## 484          484        1      3
+## 486          486        0      3
+## 504          504        0      3
+## 544          544        1      2
+## 547          547        1      2
+## 585          585        0      3
+## 678          678        1      3
+## 811          811        0      3
+## 1000        1000       NA      3
+## 1024        1024       NA      3
+## 1044        1044       NA      3
+## 1135        1135       NA      3
+## 1169        1169       NA      2
+##                                                    Name    Sex       Age
+## 54   Faunthorpe, Mrs. Lizzie (Elizabeth Anne Wilkinson) female 29.000000
+## 114                             Jussila, Miss. Katriina female 20.000000
+## 177                       Lefebre, Master. Henry Forbes   male  7.123786
+## 230                             Lefebre, Miss. Mathilde female  7.123786
+## 403                            Jussila, Miss. Mari Aina female 21.000000
+## 410                                  Lefebre, Miss. Ida female  7.123786
+## 478                           Braund, Mr. Lewis Richard   male 29.000000
+## 484                              Turkula, Mrs. (Hedwig) female 63.000000
+## 486                              Lefebre, Miss. Jeannie female  7.123786
+## 504                      Laitinen, Miss. Kristina Sofia female 37.000000
+## 544                                   Beane, Mr. Edward   male 32.000000
+## 547                   Beane, Mrs. Edward (Ethel Clarke) female 19.000000
+## 585                                 Paulner, Mr. Uscher   male 28.862881
+## 678                             Turja, Miss. Anna Sofia female 18.000000
+## 811                              Alexander, Mr. William   male 26.000000
+## 1000                   Willer, Mr. Aaron (Abi Weller")"   male 28.862881
+## 1024                      Lefebre, Mrs. Frank (Frances) female 28.862881
+## 1044                                 Storey, Mr. Thomas   male 60.500000
+## 1135                                 Hyman, Mr. Abraham   male 28.862881
+## 1169                              Faunthorpe, Mr. Harry   male 40.000000
+##      SibSp Parch Ticket    Fare Cabin Embarked  Title Fam.Size  Last.Name
+## 54       1     0   2926 26.0000              S    Mrs        2 Faunthorpe
+## 114      1     0   4136  9.8250              S   Miss        2    Jussila
+## 177      3     1   4133 25.4667              S Master        5    Lefebre
+## 230      3     1   4133 25.4667              S   Miss        5    Lefebre
+## 403      1     0   4137  9.8250              S   Miss        2    Jussila
+## 410      3     1   4133 25.4667              S   Miss        5    Lefebre
+## 478      1     0   3460  7.0458              S     Mr        2     Braund
+## 484      0     0   4134  9.5875              S    Mrs        1    Turkula
+## 486      3     1   4133 25.4667              S   Miss        5    Lefebre
+## 504      0     0   4135  9.5875              S   Miss        1   Laitinen
+## 544      1     0   2908 26.0000              S     Mr        2      Beane
+## 547      1     0   2908 26.0000              S    Mrs        2      Beane
+## 585      0     0   3411  8.7125              C     Mr        1    Paulner
+## 678      0     0   4138  9.8417              S   Miss        1      Turja
+## 811      0     0   3474  7.8875              S     Mr        1  Alexander
+## 1000     0     0   3410  8.7125              S     Mr        1     Willer
+## 1024     0     4   4133 25.4667              S    Mrs        5    Lefebre
+## 1044     0     0   3701      NA              S     Mr        1     Storey
+## 1135     0     0   3470  7.8875              S     Mr        1      Hyman
+## 1169     1     0   2926 26.0000              S     Mr        2 Faunthorpe
+##        Fam.Id Child
+## 54      Small     0
+## 114     Small     0
+## 177  5Lefebre     1
+## 230  5Lefebre     1
+## 403     Small     0
+## 410  5Lefebre     1
+## 478     Small     0
+## 484     Small     0
+## 486  5Lefebre     1
+## 504     Small     0
+## 544     Small     0
+## 547     Small     0
+## 585     Small     0
+## 678     Small     0
+## 811     Small     0
+## 1000    Small     0
+## 1024 5Lefebre     0
+## 1044    Small     0
+## 1135    Small     0
+## 1169    Small     0
+```
+
+```r
+## it's reasonable to assume that his ticket price should be around $8, but let's use the median of 3rd class fare
+combi$Fare[which(is.na(combi$Fare))] <- median(combi[combi$Pclass ==3 & !is.na(combi$Fare),]$Fare)
+```
+
+Because Fam.Id has too many levels, instead of using family id, let's use two factors only: small family or big family.  
+
+
+```r
+combi$Fam.Id2 <- as.character(combi$Fam.Id)
+combi$Fam.Id2[combi$Fam.Id2 != "Small"] <- "Big"
+combi$Fam.Id2 <- factor(combi$Fam.Id2)
+```
+
+Now it's time to create the Random Forests.  
+
+
+```r
+##install.packages("randomForest")
+library(randomForest)
+combi$Title <- as.factor(combi$Title)
+combi$Last.Name <- as.factor(combi$Last.Name)
+train <- combi[1:891,]
+test <- combi[892:nrow(combi),]
+test$Survived <- as.integer(0)
+set.seed(12)
+treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2, data=train, importance=TRUE, ntree=2000)
+varImpPlot(treeFit)
+```
+
+![plot of chunk unnamed-chunk-33](figure/unnamed-chunk-33-1.png) 
+
+#### Round 7 submission  
+
+
+```r
+Prediction <- predict(treeFit, test)
+result7 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result7, file="result7.csv", row.names=FALSE)
+```
+
+#### Round 7 submission result  
+Did not improve; accuracy dropped to 0.77512.  
+
+
+#### Round 8 submission  
+
+Use conditional Random Forest.  
+
+
+```r
+##install.packages("party")
+library(party)
+set.seed(12)
+treeFit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch
+                   + Fare + Embarked + Title + Fam.Size + Fam.Id,
+                   data=train, controls=cforest_unbiased(ntree=2000, mtry=3))
+Prediction <- predict(treeFit, test, OOB=TRUE, type="response")
+result8 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result8, file="result8.csv", row.names=FALSE)
+```
+
+#### Round 8 submission result  
+Score did not improve from the best entry (0.80383).  
+
+
+
 
 
 

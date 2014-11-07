@@ -387,7 +387,7 @@ train <- combi[1:891,]
 test <- combi[892:nrow(combi),]
 ```
 
-#### Round 5 submission.  
+#### Round 6 submission.  
 Do another rpart fit with new factors.  
 
 ```{r, fig.height=4, fig.width=6}
@@ -401,8 +401,150 @@ result5 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
 write.csv(result5, "result5.csv", row.names=F)
 ```
 
-#### Round 5 submission result.  
+#### Round 6 submission result.  
 Score improved by 0.01914, accuracy at 0.80383.  
+
+### Random Forests  
+
+First, before we jump into Random Forests model creation, let's use rpart decision tree to predict the age, instead of using the average age.  
+
+```{r}
+## create combi data frame from scratch
+###############################
+test <- read.csv("test.csv")
+train <- read.csv("train.csv")
+test$Survived <- NA
+combi <- rbind(train, test)
+
+combi$Name <- as.character(combi$Name)
+library(stringr)
+cleanTitle <- function(x) {
+    nameSplit <- str_trim(strsplit(x, ",")[[1]][2])
+    nameSplitClean <- strsplit(nameSplit, "\\.")[[1]][1]
+    nameSplitClean
+}
+
+combi$Title <- sapply(combi$Name, cleanTitle)
+
+combi[combi$Title %in% c("Capt", "Col", "Major", "Sir", "Dr"),]$Title <- "Sir"
+combi[combi$Title %in% c("Don", "Mr"),]$Title <- "Mr"
+combi[combi$Title %in% c("Dona", "Miss", "Mlle"),]$Title <- "Miss"
+combi[combi$Title %in% c("Mrs", "Mme", "Ms"),]$Title <- "Mrs"
+combi[combi$Title %in% c("Master", "Jonkheer"),]$Title <- "Master"
+combi[combi$Title %in% c("Lady", "the Countess"),]$Title <- "Lady"
+
+combi$Fam.Size <- combi$Parch + combi$SibSp + 1
+## create a new factor that is the traveler's last name.
+combi$Last.Name <- as.character(combi$Name)
+
+getLast.Name <- function(x) {
+    Last.Name <- str_trim(strsplit(x, ",")[[1]][1])
+    Last.Name
+}
+
+combi$Last.Name <- sapply(combi$Name, getLast.Name)
+
+combi$Fam.Id <- paste0(combi$Fam.Size, combi$Last.Name)
+Fam.Id <- data.frame(table(combi$Fam.Id))
+Fam.Id <- Fam.Id[order(-Fam.Id[,2]),]
+
+Fam.IdSmall <- subset(Fam.Id, Freq < 3)
+combi[combi$Fam.Id %in% Fam.IdSmall$Var1,]$Fam.Id <- "Small"
+combi$Fam.Id <- as.factor(combi$Fam.Id)
+
+################################
+## use rpart to predict age 
+hasAge <- combi[!is.na(combi$Age),]
+noAge <- combi[is.na(combi$Age),]
+library(rpart)
+ageFit <- rpart(Age ~ Pclass + Sex + SibSp + Parch + Fare + Embarked
+             + Title, 
+             data=hasAge, method="anova")
+combi[is.na(combi$Age),]$Age <- predict(ageFit, noAge)
+## add Child factor
+combi$Child <- 0
+combi[combi$Age < 15,]$Child <- 1
+```
+
+Make sure there is no NAs in any factors.  
+
+```{r}
+summary(combi)
+## there are two missing values in Embarked. Let's examine this factor.
+combi[order(combi$Ticket),c("Ticket", "Embarked")][40:63,]
+## based on the ticket number, it's almost confirmed that these two passengers embarked from S.
+combi[combi$Embarked == "",]$Embarked <- "S"
+## There is one passenger with Fare missing. Let's examine that.
+combi[is.na(combi$Fare),]
+##  examine ticket prices similar to his ticket number
+ticket <- data.frame(combi)
+ticket$Ticket <- as.integer(as.character(combi$Ticket))
+subset(ticket, Ticket > 2800 & Ticket < 4200)
+## it's reasonable to assume that his ticket price should be around $8, but let's use the median of 3rd class fare
+combi$Fare[which(is.na(combi$Fare))] <- median(combi[combi$Pclass ==3 & !is.na(combi$Fare),]$Fare)
+```
+
+Because Fam.Id has too many levels, instead of using family id, let's use two factors only: small family or big family.  
+
+```{r}
+combi$Fam.Id2 <- as.character(combi$Fam.Id)
+combi$Fam.Id2[combi$Fam.Id2 != "Small"] <- "Big"
+combi$Fam.Id2 <- factor(combi$Fam.Id2)
+```
+
+Now it's time to create the Random Forests.  
+
+```{r}
+##install.packages("randomForest")
+library(randomForest)
+combi$Title <- as.factor(combi$Title)
+combi$Last.Name <- as.factor(combi$Last.Name)
+train <- combi[1:891,]
+test <- combi[892:nrow(combi),]
+test$Survived <- as.integer(0)
+set.seed(12)
+treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2, data=train, importance=TRUE, ntree=2000)
+varImpPlot(treeFit)
+
+```
+
+#### Round 7 submission  
+
+```{r, cache=TRUE}
+Prediction <- predict(treeFit, test)
+result7 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result7, file="result7.csv", row.names=FALSE)
+
+```
+
+#### Round 7 submission result  
+Did not improve; accuracy dropped to 0.77512.  
+
+
+#### Round 8 submission  
+
+Use conditional Random Forest.  
+
+```{r, cache=TRUE}
+##install.packages("party")
+library(party)
+set.seed(12)
+treeFit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch
+                   + Fare + Embarked + Title + Fam.Size + Fam.Id,
+                   data=train, controls=cforest_unbiased(ntree=2000, mtry=3))
+Prediction <- predict(treeFit, test, OOB=TRUE, type="response")
+result8 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result8, file="result8.csv", row.names=FALSE)
+
+```
+
+#### Round 8 submission result  
+Score did not improve from the best entry (0.80383).  
+
+
+
 
 
 
