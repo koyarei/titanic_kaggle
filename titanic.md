@@ -98,6 +98,7 @@ nrow(train[train$Survived==1,]) / nrow(train)
 ```
 ## [1] 0.3838
 ```
+
 About 38.4% of passengers survived. Let's examine survival rate in relationship to passengers' demographic attributes. First, start with age and survival rate.  
 
 ```r
@@ -110,6 +111,7 @@ ggplot(train, aes(as.factor(Survived),Age)) + geom_boxplot() + theme_bw()
 ```
 
 ![plot of chunk unnamed-chunk-2](figure/unnamed-chunk-2.png) 
+
 From a galance, there doens't seem to have a strong difference in age between survivors and victims. Let's look at sex next.  
 
 
@@ -145,7 +147,13 @@ prop.table(table(train$Sex, train$Survived), 1)
 ##   female 0.2580 0.7420
 ##   male   0.8111 0.1889
 ```
-74% of females survived, versus only 19% for males.   
+74% of females survived, versus only 19% for males.  
+
+#### Round 1 submission:  
+Assume all females survived, and all males died.  
+
+#### Round 1 submission result:  
+This model had an accuracy of 0.76555.  
 
 Now let's get back to the ages.  
 
@@ -227,157 +235,11 @@ train$Child <- 0
 train[train$Age < 15,]$Child <- 1
 ```
 
-Now let's look at class and fare. 
-
-
-```r
-table(train$Pclass, train$Survived)
-```
-
-```
-##    
-##       0   1
-##   1  80 136
-##   2  97  87
-##   3 372 119
-```
-
-```r
-prop.table(table(train$Pclass, train$Survived),1)
-```
-
-```
-##    
-##          0      1
-##   1 0.3704 0.6296
-##   2 0.5272 0.4728
-##   3 0.7576 0.2424
-```
-
-```r
-## it seems that the higher the class, the more likely to survive; the hypothesis is that class was associated to social status.
-cor(train$Pclass, train$Survived)
-```
-
-```
-## [1] -0.3385
-```
-
-```r
-lm(train$Pclass ~ train$Survived)
-```
-
-```
-## 
-## Call:
-## lm(formula = train$Pclass ~ train$Survived)
-## 
-## Coefficients:
-##    (Intercept)  train$Survived  
-##          2.532          -0.582
-```
-
-```r
-##  a linear regression is detected with correlation -0.33.
-```
-
-If class level is associated to social status, and thus associated to survival rate, let's compare class level to the fare to see if we can find anything new.   
-
-
-```r
-hist(train$Fare)
-```
-
-![plot of chunk unnamed-chunk-9](figure/unnamed-chunk-9.png) 
-
-Majority of the passengers purchased a ticket cheaper than $100; how many passengers actually purchased an expensive ticket?  
-
-
-```r
-nrow(subset(train, Fare >= 100)) / nrow(train)
-```
-
-```
-## [1] 0.05948
-```
-
-```r
-nrow(subset(train, Fare >= 100))
-```
-
-```
-## [1] 53
-```
-6%, or 53 passengers purchased an expensive ticket. Did they have better survival rate, since they were likely well-off, thus likely with higher social status?  
-
-
-```r
-ballerz <- subset(train, Fare >= 100)
-prop.table(table(ballerz$Survived))
-```
-
-```
-## 
-##      0      1 
-## 0.2642 0.7358
-```
-Yes, passengers able to afford an expensive ticket (>$100) had a survival rate of 74%, much higher than average, even much higher than the survival rate of children.   
-
-Now just to confirm -- did those wealthy passengers all stayed at higher classes?  
-
-
-```r
-table(ballerz$Pclass)
-```
-
-```
-## 
-##  1 
-## 53
-```
-
-Yes, all of them were riding first class.  
-
 #### Learnings so far:  
 1. Females had higher survival rate than men;  
-2. Children under the age of 15 had higher survival rate than average, regardless of gender;  
-3. Passengers with a ticket fare higher than $100 mostly survived;  
+2. Children under the age of 15 were treated equally regardless of gender;  
 
-We can apply those learnings to our next submission.  
-
-First, assume all children under the age of 15 survived.  
-
-```r
-test <- read.csv("test.csv")
-## create a column "Survived"
-test$Survived <- 0
-test[test$Age < 15 & !is.na(test$Age),]$Survived <- 1
-```
-
-Second, among those older than 15, find the ones that paid more than $100 for their fare and assume them survived.  
-
-
-```r
-test[test$Survived == 0 & test$Fare > 100 & !is.na(test$Fare),]$Survived <- 1
-```
-
-Finally, among the rest of the passengers, assume all women survived.  
-
-
-```r
-test[test$Survived == 0 & test$Sex == "female",]$Survived <- 1
-```
-
-Now we have the final prediction for this round, let's clean it up and upload.  
-
-
-```r
-result1 <- subset(test, select=c(PassengerId, Survived))
-write.csv(result1, "result1.csv", row.names=FALSE)
-```
-
-### Result for round 1  
-The accuracy actually is only 74%, lower than guessing all females survived. Now take another look at the categorization of fare and class. First, find the most common fare price.  
+Now take another look at the categorization of fare and class. First, find the most common fare price.  
 
 
 ```r
@@ -510,62 +372,6 @@ Let's look at the distribution of passengers across gender, class, and fare leve
 ```r
 survSumFareClassSex <- aggregate(Survived ~ Fare2 + Pclass + Sex + Child, data=train, length)
 colnames(survSumFareClassSex)[5] <- "Total.Size"
-survSumFareClassSex
-```
-
-```
-##    Fare2 Pclass    Sex Child Total.Size
-## 1  24-28      1 female     0          5
-## 2  28-52      1 female     0          9
-## 3  52-78      1 female     0         24
-## 4    78+      1 female     0         54
-## 5  10-15      2 female     0         30
-## 6  15-24      2 female     0         10
-## 7  24-28      2 female     0         18
-## 8  28-52      2 female     0          6
-## 9  52-78      2 female     0          2
-## 10   <10      3 female     0         62
-## 11 10-15      3 female     0         13
-## 12 15-24      3 female     0         25
-## 13 24-28      3 female     0          6
-## 14 28-52      3 female     0          8
-## 15 52-78      3 female     0          3
-## 16   <10      1   male     0          6
-## 17 24-28      1   male     0         26
-## 18 28-52      1   male     0         35
-## 19 52-78      1   male     0         24
-## 20   78+      1   male     0         28
-## 21   <10      2   male     0          6
-## 22 10-15      2   male     0         57
-## 23 15-24      2   male     0          6
-## 24 24-28      2   male     0         19
-## 25 28-52      2   male     0          6
-## 26 52-78      2   male     0          5
-## 27   <10      3   male     0        259
-## 28 10-15      3   male     0         10
-## 29 15-24      3   male     0         30
-## 30 24-28      3   male     0          7
-## 31 28-52      3   male     0          3
-## 32 52-78      3   male     0         11
-## 33   78+      1 female     1          2
-## 34 15-24      2 female     1          2
-## 35 24-28      2 female     1          4
-## 36 28-52      2 female     1          4
-## 37   <10      3 female     1          2
-## 38 10-15      3 female     1          7
-## 39 15-24      3 female     1          9
-## 40 24-28      3 female     1          3
-## 41 28-52      3 female     1          6
-## 42   78+      1   male     1          3
-## 43 10-15      2   male     1          1
-## 44 15-24      2   male     1          2
-## 45 24-28      2   male     1          2
-## 46 28-52      2   male     1          4
-## 47   <10      3   male     1          1
-## 48 10-15      3   male     1          3
-## 49 15-24      3   male     1          6
-## 50 24-28      3   male     1          2
-## 51 28-52      3   male     1         15
 ```
 
 Now let's look at their survival rate.  
@@ -652,6 +458,7 @@ subset(survRateFareClassSexChildFull, Sex=="female" & Survival.Rate < 0.5)
 ## 46 52-78      3 female     0          0.00          3
 ```
 
+#### Round 2 submission:  
 Seesm like females in the 3rd class with a fare price 24-28, 28-52, or 25-78 mostly died. Let's use this information to modify the gender model for round 2 submission.  
 
 
@@ -668,4 +475,82 @@ write.csv(result2, "result2.csv", row.names=FALSE)
 
 #### Round 2 submission result 
 
-My score imrpvoed. Now we have 0.77990 accuracy, beat the benchmark basic random forests provied by Kaggle.  
+My score improved. Now we have 0.77990 accuracy, beat the benchmark basic random forests provied by Kaggle (0.77512).  
+
+Based on this model, let's investigate male survivors; currently all males were assumed dead, but maybe there were characteristics indicative of their survival.  
+
+
+```r
+survRateFareClassSexChildMale <- subset(survRateFareClassSexChildFull, Sex=="male")
+survRateFareClassSexChildMale[order(-survRateFareClassSexChildMale$Survival.Rate),]
+```
+
+```
+##    Fare2 Pclass  Sex Child Survival.Rate Total.Size
+## 6    <10      3 male     1          1.00          1
+## 9  10-15      2 male     1          1.00          1
+## 13 10-15      3 male     1          1.00          3
+## 17 15-24      2 male     1          1.00          2
+## 27 24-28      2 male     1          1.00          2
+## 37 28-52      2 male     1          1.00          4
+## 51   78+      1 male     1          1.00          3
+## 21 15-24      3 male     1          0.67          6
+## 47 52-78      3 male     0          0.45         11
+## 23 24-28      1 male     0          0.42         26
+## 43 52-78      1 male     0          0.42         24
+## 33 28-52      1 male     0          0.34         35
+## 50   78+      1 male     0          0.32         28
+## 20 15-24      3 male     0          0.17         30
+## 8  10-15      2 male     0          0.12         57
+## 5    <10      3 male     0          0.11        259
+## 41 28-52      3 male     1          0.07         15
+## 26 24-28      2 male     0          0.05         19
+## 1    <10      1 male     0          0.00          6
+## 2    <10      2 male     0          0.00          6
+## 12 10-15      3 male     0          0.00         10
+## 16 15-24      2 male     0          0.00          6
+## 30 24-28      3 male     0          0.00          7
+## 31 24-28      3 male     1          0.00          2
+## 36 28-52      2 male     0          0.00          6
+## 40 28-52      3 male     0          0.00          3
+## 45 52-78      2 male     0          0.00          5
+```
+
+It seems like male children, if stayed in a first or second class cabin, mostly survived.  
+
+
+```r
+subset(survRateFareClassSexChildMale, (Pclass==2 | Pclass==1) & Child==1)
+```
+
+```
+##    Fare2 Pclass  Sex Child Survival.Rate Total.Size
+## 9  10-15      2 male     1             1          1
+## 17 15-24      2 male     1             1          2
+## 27 24-28      2 male     1             1          2
+## 37 28-52      2 male     1             1          4
+## 51   78+      1 male     1             1          3
+```
+
+#### Round 3 submission:  
+Assume male children stayed in first or second class survived.  
+
+
+
+```r
+test <- read.csv("test.csv")
+## create a column "Survived"
+test$Survived <- 0
+test[test$Survived == 0 & test$Sex == "female",]$Survived <- 1
+test[test$Sex == "female" & test$Fare >= 24 & test$Fare < 78 & test$Pclass==3,]$Survived <- 0
+test[test$Sex == "male" & (test$Pclass == 1 | test$Pclass == 2) & test$Age < 15 & !is.na(test$Age),]$Survived <- 1
+
+result3 <- subset(test, select=c(PassengerId, Survived))
+write.csv(result3, "result3.csv", row.names=FALSE)
+```
+
+#### Round 3 submission result:  
+Score improved by 0.00478, now accuracy at 0.78469, also beat the gender, price, and class based model provided by Kaggle (0.77990).  
+
+
+
