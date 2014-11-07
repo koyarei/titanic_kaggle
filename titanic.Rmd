@@ -93,7 +93,14 @@ age15 <- subset(train, Age < 15)
 table(age15$Sex, age15$Survived)
 prop.table(table(age15$Sex, age15$Survived), 1)
 ```  
-Children younger than 15 had a survival rate higher than 54%, much better than the average of 38%. Now let's look at class and fare.  
+Children younger than 15 had a survival rate higher than 54%, much better than the average of 38%. Let's assign this level to the passengers.  
+
+```{r}
+train$Child <- 0
+train[train$Age < 15,]$Child <- 1
+```
+
+Now let's look at class and fare. 
 
 ```{r}
 table(train$Pclass, train$Survived)
@@ -163,14 +170,78 @@ Now we have the final prediction for this round, let's clean it up and upload.
 
 ```{r}
 result1 <- subset(test, select=c(PassengerId, Survived))
+write.csv(result1, "result1.csv", row.names=FALSE)
 ```
 
+### Result for round 1  
+The accuracy actually is only 74%, lower than guessing all females survived. Now take another look at the categorization of fare and class. First, find the most common fare price.  
 
+```{r}
+for (i in 10:100) {
+    propotion <- length(train[train$Fare<i,]$Fare) / nrow(train)
+    msg <- paste("Fare lower than ", i, " account for ", round(propotion, digits=2))
+    print(msg)
+}
+```
 
+We can categorize fare into one of the following buckets:  
+1. < 10, about 38% passengers;  
+2. >=10 and <15, about 13% passengers;  
+3. >=15 and <24, about 10% passengers;  
+4. >=24 and <28, about 11% passengers;  
+5. >=28 and <52, about 10% passengers;  
+6. >=52 and <78, about 8% passengers;  
+7. >=78, the rest of the 10% passengers;  
 
+Now let's assign a new class to the train dataset.  
 
+```{r}
+train$Fare2 <- "78+"
+train[train$Fare<78 & train$Fare>=52,]$Fare2 <- "52-78"
+train[train$Fare<52 & train$Fare>=28,]$Fare2 <- "28-52"
+train[train$Fare<28 & train$Fare>=24,]$Fare2 <- "24-28"
+train[train$Fare<24 & train$Fare>=15,]$Fare2 <- "15-24"
+train[train$Fare<15 & train$Fare>=10,]$Fare2 <- "10-15"
+train[train$Fare<10,]$Fare2 <- "<10"
 
+```
 
+Let's look at the distribution of passengers across gender, class, and fare level:  
 
+```{r}
+survSumFareClassSex <- aggregate(Survived ~ Fare2 + Pclass + Sex + Child, data=train, length)
+colnames(survSumFareClassSex)[5] <- "Total.Size"
+survSumFareClassSex
+```
 
+Now let's look at their survival rate.  
 
+```{r}
+survRate <- function(x) {
+    round(sum(x) / length(x),digits=2)
+    
+}
+survRateFareClassSex <- aggregate(Survived ~ Fare2 + Pclass + Sex + Child, data=train, survRate)
+colnames(survRateFareClassSex)[5] <- "Survival.Rate"
+survRateFareClassSexChildFull <- merge(survRateFareClassSex, survSumFareClassSex)
+survRateFareClassSexChildFull[order(-survRateFareClassSexChildFull$Survival.Rate, -survRateFareClassSexChildFull$Total.Size),]
+## find the females that had low survival rate 
+subset(survRateFareClassSexChildFull, Sex=="female" & Survival.Rate < 0.5)
+```
+
+Seesm like females in the 3rd class with a fare price 24-28, 28-52, or 25-78 mostly died. Let's use this information to modify the gender model for round 2 submission.  
+
+```{r}
+test <- read.csv("test.csv")
+## create a column "Survived"
+test$Survived <- 0
+test[test$Survived == 0 & test$Sex == "female",]$Survived <- 1
+test[test$Sex == "female" & test$Fare >= 24 & test$Fare < 78 & test$Pclass==3,]$Survived <- 0
+
+result2 <- subset(test, select=c(PassengerId, Survived))
+write.csv(result2, "result2.csv", row.names=FALSE)
+```
+
+#### Round 2 submission result 
+
+My score imrpvoed. Now we have 0.77990 accuracy, beat the benchmark basic random forests provied by Kaggle.  

@@ -219,7 +219,15 @@ prop.table(table(age15$Sex, age15$Survived), 1)
 ##   female 0.3846 0.6154
 ##   male   0.4615 0.5385
 ```
-Children younger than 15 had a survival rate higher than 54%, much better than the average of 38%. Now let's look at class and fare.  
+Children younger than 15 had a survival rate higher than 54%, much better than the average of 38%. Let's assign this level to the passengers.  
+
+
+```r
+train$Child <- 0
+train[train$Age < 15,]$Child <- 1
+```
+
+Now let's look at class and fare. 
 
 
 ```r
@@ -280,7 +288,7 @@ If class level is associated to social status, and thus associated to survival r
 hist(train$Fare)
 ```
 
-![plot of chunk unnamed-chunk-8](figure/unnamed-chunk-8.png) 
+![plot of chunk unnamed-chunk-9](figure/unnamed-chunk-9.png) 
 
 Majority of the passengers purchased a ticket cheaper than $100; how many passengers actually purchased an expensive ticket?  
 
@@ -365,14 +373,299 @@ Now we have the final prediction for this round, let's clean it up and upload.
 
 ```r
 result1 <- subset(test, select=c(PassengerId, Survived))
+write.csv(result1, "result1.csv", row.names=FALSE)
 ```
 
+### Result for round 1  
+The accuracy actually is only 74%, lower than guessing all females survived. Now take another look at the categorization of fare and class. First, find the most common fare price.  
 
 
+```r
+for (i in 10:100) {
+    propotion <- length(train[train$Fare<i,]$Fare) / nrow(train)
+    msg <- paste("Fare lower than ", i, " account for ", round(propotion, digits=2))
+    print(msg)
+}
+```
+
+```
+## [1] "Fare lower than  10  account for  0.38"
+## [1] "Fare lower than  11  account for  0.41"
+## [1] "Fare lower than  12  account for  0.42"
+## [1] "Fare lower than  13  account for  0.43"
+## [1] "Fare lower than  14  account for  0.49"
+## [1] "Fare lower than  15  account for  0.51"
+## [1] "Fare lower than  16  account for  0.54"
+## [1] "Fare lower than  17  account for  0.56"
+## [1] "Fare lower than  18  account for  0.56"
+## [1] "Fare lower than  19  account for  0.57"
+## [1] "Fare lower than  20  account for  0.58"
+## [1] "Fare lower than  21  account for  0.59"
+## [1] "Fare lower than  22  account for  0.6"
+## [1] "Fare lower than  23  account for  0.6"
+## [1] "Fare lower than  24  account for  0.61"
+## [1] "Fare lower than  25  account for  0.63"
+## [1] "Fare lower than  26  account for  0.63"
+## [1] "Fare lower than  27  account for  0.7"
+## [1] "Fare lower than  28  account for  0.72"
+## [1] "Fare lower than  29  account for  0.72"
+## [1] "Fare lower than  30  account for  0.73"
+## [1] "Fare lower than  31  account for  0.75"
+## [1] "Fare lower than  32  account for  0.76"
+## [1] "Fare lower than  33  account for  0.77"
+## [1] "Fare lower than  34  account for  0.77"
+## [1] "Fare lower than  35  account for  0.78"
+## [1] "Fare lower than  36  account for  0.78"
+## [1] "Fare lower than  37  account for  0.78"
+## [1] "Fare lower than  38  account for  0.79"
+## [1] "Fare lower than  39  account for  0.79"
+## [1] "Fare lower than  40  account for  0.8"
+## [1] "Fare lower than  41  account for  0.8"
+## [1] "Fare lower than  42  account for  0.81"
+## [1] "Fare lower than  43  account for  0.81"
+## [1] "Fare lower than  44  account for  0.81"
+## [1] "Fare lower than  45  account for  0.81"
+## [1] "Fare lower than  46  account for  0.81"
+## [1] "Fare lower than  47  account for  0.81"
+## [1] "Fare lower than  48  account for  0.82"
+## [1] "Fare lower than  49  account for  0.82"
+## [1] "Fare lower than  50  account for  0.82"
+## [1] "Fare lower than  51  account for  0.82"
+## [1] "Fare lower than  52  account for  0.82"
+## [1] "Fare lower than  53  account for  0.84"
+## [1] "Fare lower than  54  account for  0.84"
+## [1] "Fare lower than  55  account for  0.84"
+## [1] "Fare lower than  56  account for  0.85"
+## [1] "Fare lower than  57  account for  0.86"
+## [1] "Fare lower than  58  account for  0.86"
+## [1] "Fare lower than  59  account for  0.86"
+## [1] "Fare lower than  60  account for  0.86"
+## [1] "Fare lower than  61  account for  0.86"
+## [1] "Fare lower than  62  account for  0.87"
+## [1] "Fare lower than  63  account for  0.87"
+## [1] "Fare lower than  64  account for  0.87"
+## [1] "Fare lower than  65  account for  0.87"
+## [1] "Fare lower than  66  account for  0.87"
+## [1] "Fare lower than  67  account for  0.87"
+## [1] "Fare lower than  68  account for  0.87"
+## [1] "Fare lower than  69  account for  0.87"
+## [1] "Fare lower than  70  account for  0.88"
+## [1] "Fare lower than  71  account for  0.88"
+## [1] "Fare lower than  72  account for  0.89"
+## [1] "Fare lower than  73  account for  0.89"
+## [1] "Fare lower than  74  account for  0.89"
+## [1] "Fare lower than  75  account for  0.89"
+## [1] "Fare lower than  76  account for  0.89"
+## [1] "Fare lower than  77  account for  0.9"
+## [1] "Fare lower than  78  account for  0.9"
+## [1] "Fare lower than  79  account for  0.91"
+## [1] "Fare lower than  80  account for  0.91"
+## [1] "Fare lower than  81  account for  0.92"
+## [1] "Fare lower than  82  account for  0.92"
+## [1] "Fare lower than  83  account for  0.92"
+## [1] "Fare lower than  84  account for  0.93"
+## [1] "Fare lower than  85  account for  0.93"
+## [1] "Fare lower than  86  account for  0.93"
+## [1] "Fare lower than  87  account for  0.93"
+## [1] "Fare lower than  88  account for  0.93"
+## [1] "Fare lower than  89  account for  0.93"
+## [1] "Fare lower than  90  account for  0.93"
+## [1] "Fare lower than  91  account for  0.94"
+## [1] "Fare lower than  92  account for  0.94"
+## [1] "Fare lower than  93  account for  0.94"
+## [1] "Fare lower than  94  account for  0.94"
+## [1] "Fare lower than  95  account for  0.94"
+## [1] "Fare lower than  96  account for  0.94"
+## [1] "Fare lower than  97  account for  0.94"
+## [1] "Fare lower than  98  account for  0.94"
+## [1] "Fare lower than  99  account for  0.94"
+## [1] "Fare lower than  100  account for  0.94"
+```
+
+We can categorize fare into one of the following buckets:  
+1. < 10, about 38% passengers;  
+2. >=10 and <15, about 13% passengers;  
+3. >=15 and <24, about 10% passengers;  
+4. >=24 and <28, about 11% passengers;  
+5. >=28 and <52, about 10% passengers;  
+6. >=52 and <78, about 8% passengers;  
+7. >=78, the rest of the 10% passengers;  
+
+Now let's assign a new class to the train dataset.  
 
 
+```r
+train$Fare2 <- "78+"
+train[train$Fare<78 & train$Fare>=52,]$Fare2 <- "52-78"
+train[train$Fare<52 & train$Fare>=28,]$Fare2 <- "28-52"
+train[train$Fare<28 & train$Fare>=24,]$Fare2 <- "24-28"
+train[train$Fare<24 & train$Fare>=15,]$Fare2 <- "15-24"
+train[train$Fare<15 & train$Fare>=10,]$Fare2 <- "10-15"
+train[train$Fare<10,]$Fare2 <- "<10"
+```
+
+Let's look at the distribution of passengers across gender, class, and fare level:  
 
 
+```r
+survSumFareClassSex <- aggregate(Survived ~ Fare2 + Pclass + Sex + Child, data=train, length)
+colnames(survSumFareClassSex)[5] <- "Total.Size"
+survSumFareClassSex
+```
+
+```
+##    Fare2 Pclass    Sex Child Total.Size
+## 1  24-28      1 female     0          5
+## 2  28-52      1 female     0          9
+## 3  52-78      1 female     0         24
+## 4    78+      1 female     0         54
+## 5  10-15      2 female     0         30
+## 6  15-24      2 female     0         10
+## 7  24-28      2 female     0         18
+## 8  28-52      2 female     0          6
+## 9  52-78      2 female     0          2
+## 10   <10      3 female     0         62
+## 11 10-15      3 female     0         13
+## 12 15-24      3 female     0         25
+## 13 24-28      3 female     0          6
+## 14 28-52      3 female     0          8
+## 15 52-78      3 female     0          3
+## 16   <10      1   male     0          6
+## 17 24-28      1   male     0         26
+## 18 28-52      1   male     0         35
+## 19 52-78      1   male     0         24
+## 20   78+      1   male     0         28
+## 21   <10      2   male     0          6
+## 22 10-15      2   male     0         57
+## 23 15-24      2   male     0          6
+## 24 24-28      2   male     0         19
+## 25 28-52      2   male     0          6
+## 26 52-78      2   male     0          5
+## 27   <10      3   male     0        259
+## 28 10-15      3   male     0         10
+## 29 15-24      3   male     0         30
+## 30 24-28      3   male     0          7
+## 31 28-52      3   male     0          3
+## 32 52-78      3   male     0         11
+## 33   78+      1 female     1          2
+## 34 15-24      2 female     1          2
+## 35 24-28      2 female     1          4
+## 36 28-52      2 female     1          4
+## 37   <10      3 female     1          2
+## 38 10-15      3 female     1          7
+## 39 15-24      3 female     1          9
+## 40 24-28      3 female     1          3
+## 41 28-52      3 female     1          6
+## 42   78+      1   male     1          3
+## 43 10-15      2   male     1          1
+## 44 15-24      2   male     1          2
+## 45 24-28      2   male     1          2
+## 46 28-52      2   male     1          4
+## 47   <10      3   male     1          1
+## 48 10-15      3   male     1          3
+## 49 15-24      3   male     1          6
+## 50 24-28      3   male     1          2
+## 51 28-52      3   male     1         15
+```
+
+Now let's look at their survival rate.  
 
 
+```r
+survRate <- function(x) {
+    round(sum(x) / length(x),digits=2)
+    
+}
+survRateFareClassSex <- aggregate(Survived ~ Fare2 + Pclass + Sex + Child, data=train, survRate)
+colnames(survRateFareClassSex)[5] <- "Survival.Rate"
+survRateFareClassSexChildFull <- merge(survRateFareClassSex, survSumFareClassSex)
+survRateFareClassSexChildFull[order(-survRateFareClassSexChildFull$Survival.Rate, -survRateFareClassSexChildFull$Total.Size),]
+```
 
+```
+##    Fare2 Pclass    Sex Child Survival.Rate Total.Size
+## 42 52-78      1 female     0          1.00         24
+## 34 28-52      2 female     0          1.00          6
+## 22 24-28      1 female     0          1.00          5
+## 25 24-28      2 female     1          1.00          4
+## 35 28-52      2 female     1          1.00          4
+## 37 28-52      2   male     1          1.00          4
+## 13 10-15      3   male     1          1.00          3
+## 51   78+      1   male     1          1.00          3
+## 15 15-24      2 female     1          1.00          2
+## 17 15-24      2   male     1          1.00          2
+## 27 24-28      2   male     1          1.00          2
+## 44 52-78      2 female     0          1.00          2
+## 6    <10      3   male     1          1.00          1
+## 9  10-15      2   male     1          1.00          1
+## 48   78+      1 female     0          0.98         54
+## 7  10-15      2 female     0          0.90         30
+## 14 15-24      2 female     0          0.90         10
+## 24 24-28      2 female     0          0.89         18
+## 32 28-52      1 female     0          0.89          9
+## 11 10-15      3 female     1          0.71          7
+## 19 15-24      3 female     1          0.67          9
+## 21 15-24      3   male     1          0.67          6
+## 18 15-24      3 female     0          0.64         25
+## 3    <10      3 female     0          0.60         62
+## 4    <10      3 female     1          0.50          2
+## 49   78+      1 female     1          0.50          2
+## 47 52-78      3   male     0          0.45         11
+## 23 24-28      1   male     0          0.42         26
+## 43 52-78      1   male     0          0.42         24
+## 33 28-52      1   male     0          0.34         35
+## 50   78+      1   male     0          0.32         28
+## 10 10-15      3 female     0          0.31         13
+## 20 15-24      3   male     0          0.17         30
+## 28 24-28      3 female     0          0.17          6
+## 39 28-52      3 female     1          0.17          6
+## 8  10-15      2   male     0          0.12         57
+## 38 28-52      3 female     0          0.12          8
+## 5    <10      3   male     0          0.11        259
+## 41 28-52      3   male     1          0.07         15
+## 26 24-28      2   male     0          0.05         19
+## 12 10-15      3   male     0          0.00         10
+## 30 24-28      3   male     0          0.00          7
+## 1    <10      1   male     0          0.00          6
+## 2    <10      2   male     0          0.00          6
+## 16 15-24      2   male     0          0.00          6
+## 36 28-52      2   male     0          0.00          6
+## 45 52-78      2   male     0          0.00          5
+## 29 24-28      3 female     1          0.00          3
+## 40 28-52      3   male     0          0.00          3
+## 46 52-78      3 female     0          0.00          3
+## 31 24-28      3   male     1          0.00          2
+```
+
+```r
+## find the females that had low survival rate 
+subset(survRateFareClassSexChildFull, Sex=="female" & Survival.Rate < 0.5)
+```
+
+```
+##    Fare2 Pclass    Sex Child Survival.Rate Total.Size
+## 10 10-15      3 female     0          0.31         13
+## 28 24-28      3 female     0          0.17          6
+## 29 24-28      3 female     1          0.00          3
+## 38 28-52      3 female     0          0.12          8
+## 39 28-52      3 female     1          0.17          6
+## 46 52-78      3 female     0          0.00          3
+```
+
+Seesm like females in the 3rd class with a fare price 24-28, 28-52, or 25-78 mostly died. Let's use this information to modify the gender model for round 2 submission.  
+
+
+```r
+test <- read.csv("test.csv")
+## create a column "Survived"
+test$Survived <- 0
+test[test$Survived == 0 & test$Sex == "female",]$Survived <- 1
+test[test$Sex == "female" & test$Fare >= 24 & test$Fare < 78 & test$Pclass==3,]$Survived <- 0
+
+result2 <- subset(test, select=c(PassengerId, Survived))
+write.csv(result2, "result2.csv", row.names=FALSE)
+```
+
+#### Round 2 submission result 
+
+My score imrpvoed. Now we have 0.77990 accuracy, beat the benchmark basic random forests provied by Kaggle.  
