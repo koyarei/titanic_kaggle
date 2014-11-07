@@ -44,6 +44,7 @@ http://trevorstephens.com/post/72920580937/titanic-getting-started-with-r-part-2
 #### Load the data
 ```{r}
 train <- read.csv("train.csv")
+test <- read.csv("test.csv")
 head(train)
 ## how many observations 
 nrow(train)
@@ -62,6 +63,8 @@ ggplot(train, aes(as.factor(Survived),Age)) + geom_boxplot() + theme_bw()
 
 From a galance, there doens't seem to have a strong difference in age between survivors and victims. Let's look at sex next.  
 
+### Gender Model:  
+
 ```{r, fig.height=4, fig.width=6}
 table(train$Sex)
 table(train$Sex, train$Survived)  
@@ -76,6 +79,9 @@ Assume all females survived, and all males died.
 #### Round 1 submission result:  
 This model had an accuracy of 0.76555.  
 
+### Gender, Class, Fare, and Children Model:  
+
+
 Now let's get back to the ages.  
 ```{r}
 summary(train$Age)
@@ -84,6 +90,28 @@ yesAge <- train[!is.na(train$Age),]
 train[is.na(train$Age),"Age"] <- mean(yesAge$Age)
 ```  
 Here, the assumption is that women and children had priority access to lifeboats and life vests. The question is how young should a child be to be considered eligible for that treatment? Let's use a for loop, starting from the age 18, and compare the difference of the survival rates between boys and girls, if we found an age group with almost equal survival rate between both genders, we have found the threadshold.  
+
+**Update:** This finding was later confirmed by my reserach on [Wikipedia](http://en.wikipedia.org/wiki/RMS_Titanic#Survivors_and_victims). According to the table, there were 109 children in total, since we only have a portion of the data (train), we can calculate the ratio of observation data in the training set versus the complete dataset.  
+
+```{r}
+rate <- nrow(train) / (nrow(train) + nrow(test))
+```
+
+We have about 68% of all observations, meaning the number of children in our training dataset should follow the same ratio.  
+
+```{r}
+rate * 109
+```
+
+We should have about 74 children in our training dataset. Let's verify that with our 15 thredshold.  
+
+```{r}
+nrow(train[train$Age < 15,])
+
+```
+78, very close to the number 74. 15 is the correct threshold. According to the table, 100% of children stayed in second class survived. We will apply this learning later.  
+
+**Update over**  
 
 ```{r}
 for (i in 2:18) {
@@ -182,7 +210,7 @@ write.csv(result2, "result2.csv", row.names=FALSE)
 
 #### Round 2 submission result 
 
-My score improved. Now we have 0.77990 accuracy, beat the benchmark basic random forests provied by Kaggle (0.77512).  
+My score improved. Now we have 0.77990 accuracy, beat the benchmark *Basic Random Forests Model* provied by Kaggle (0.77512).  
 
 Based on this model, let's investigate male survivors; currently all males were assumed dead, but maybe there were characteristics indicative of their survival.  
 
@@ -191,14 +219,14 @@ survRateFareClassSexChildMale <- subset(survRateFareClassSexChildFull, Sex=="mal
 survRateFareClassSexChildMale[order(-survRateFareClassSexChildMale$Survival.Rate),]
 ```
 
-It seems like male children, if stayed in a first or second class cabin, mostly survived.  
+It seems like male children, if stayed in a first or second class cabin, all survived.  
 
 ```{r}
 subset(survRateFareClassSexChildMale, (Pclass==2 | Pclass==1) & Child==1)
 ```
 
 #### Round 3 submission:  
-Assume male children stayed in first or second class survived.  
+Assume male children stayed in first or second class survived. This assumption also is reflective of our learning from Wikipedia, that all children from second class survived, regardless of gender.  
 
 
 ```{r}
@@ -214,7 +242,167 @@ write.csv(result3, "result3.csv", row.names=FALSE)
 ```
 
 #### Round 3 submission result:  
-Score improved by 0.00478, now accuracy at 0.78469, also beat the gender, price, and class based model provided by Kaggle (0.77990).  
+Score improved by 0.00478, now accuracy at 0.78469, also beat the *Gender, Price, and Class Based Model* provided by Kaggle (0.77990).  
+
+### Decision Tree Model:  
+
+```{r}
+##install.packages("rpart")
+library(rpart)
+fit <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked, data=train, method="class")
+##install.packages('rattle')
+##install.packages('rpart.plot')
+##install.packages('RColorBrewer')
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+fancyRpartPlot(fit)
+Prediction <- predict(fit, test, type = "class")
+result4 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result4, "result4.csv", row.names=F)
+```
+
+### Round 4 submission result:  
+Score did not improve, accuracy from rpart decision tree model is at 0.77033.  
+
+Now let's change some settings within the rpart function via rpart.control.  
+
+```{r, fig.height=4, fig.width=6}
+fit <- rpart(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Embarked, data=train,
+             method="class", control=rpart.control(minisplit=5, cp=0))
+fancyRpartPlot(fit)
+Prediction <- predict(fit, test, type = "class")
+result5 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result5, "result5.csv", row.names=F)
+
+```
+
+### Round 5 submission result:  
+Score did not improve; rather, the accuracy dropped to 0.73684, worse than the simple gender model.  
+
+## Feature Engineering  
+
+First, create a combined data frame with both training and test data.  
+```{r}
+test <- read.csv("test.csv")
+train <- read.csv("train.csv")
+test$Survived <- NA
+combi <- rbind(train, test)
+```
+
+Make each passenger's title a factor.  
+
+```{r}
+##install.packages("stringr")
+library(stringr)
+combi$Name <- as.character(combi$Name)
+
+cleanTitle <- function(x) {
+    nameSplit <- str_trim(strsplit(x, ",")[[1]][2])
+    nameSplitClean <- strsplit(nameSplit, "\\.")[[1]][1]
+    nameSplitClean
+}
+
+combi$Title <- sapply(combi$Name, cleanTitle)
+```
+
+Summarize the titles:  
++ Capt: honorific addressed to someone served in military with Captain ranking
++ Col: someone served in military with Colonel ranking (higher than Captain)  
++ Don: Spanish honorific equivelant to "Mister"  
++ Dona: Spanish honorific equivelant to "Miss"  
++ Dr: Someone with a doctorate-level degree (likely wealthy)    
++ Jonkheer: Dutch honorific of nobility, equivelant to "Master"  
++ Lady: a woman of nobility  
++ Major: someone served in military, higher than Captain but lower than Colonel  
++ Master: a young unmarried boy  
++ Miss: a young unmarried woman  
++ Mlle: french honorific equivelant to "Miss"  
++ Mme: french honorific equivelant to "Mrs"  
++ Ms: equivelant to Mrs  
++ Rev: a Chiristian clergy or minister  
++ Sir: a knight  
++ Countess:  a woman of nobility  
+ 
+ Combine duplicate titles:  
+ 
+```{r}
+combi[combi$Title %in% c("Capt", "Col", "Major", "Sir", "Dr"),]$Title <- "Sir"
+combi[combi$Title %in% c("Don", "Mr"),]$Title <- "Mr"
+combi[combi$Title %in% c("Dona", "Miss", "Mlle"),]$Title <- "Miss"
+combi[combi$Title %in% c("Mrs", "Mme", "Ms"),]$Title <- "Mrs"
+combi[combi$Title %in% c("Master", "Jonkheer"),]$Title <- "Master"
+combi[combi$Title %in% c("Lady", "the Countess"),]$Title <- "Lady"
+```
+
+Now let's add a factor indicating the family size the passenger was traveling with, also identifying their family name.   
+
+```{r}
+combi$Fam.Size <- combi$Parch + combi$SibSp + 1
+## create a new factor that is the traveler's last name.
+combi$Last.Name <- as.character(combi$Name)
+
+getLast.Name <- function(x) {
+    Last.Name <- str_trim(strsplit(x, ",")[[1]][1])
+    Last.Name
+}
+
+combi$Last.Name <- sapply(combi$Name, getLast.Name)
+```
+
+Create a new factor called "Fam.Id"" combining family name and family size.  
+
+```{r}
+combi$Fam.Id <- paste0(combi$Fam.Size, combi$Last.Name)
+Fam.Id <- data.frame(table(combi$Fam.Id))
+Fam.Id <- Fam.Id[order(-Fam.Id[,2]),]
+head(Fam.Id)
+```
+
+*Distractive side note: Number one on the list, Sage family, traveled with 11 family members. An article on [Encyclopedia-Titanica](http://www.encyclopedia-titanica.org/titanic-victim/john-george-sage.html) says that John George Sage, 44, was reloacting his entire family (including his wife and nine kids) to Jacksonville, FL when they boarded Titanic. The whole family were lost in the accident. Their daughter Stella (20) was able to board a lifeboat, but gave it up when her family were unable to join.*  
+
+Any Fam.Id with frequency lower than 3 should be assigned a generic factor to prevent overfitting.  
+
+```{r}
+Fam.IdSmall <- subset(Fam.Id, Freq < 3)
+combi[combi$Fam.Id %in% Fam.IdSmall$Var1,]$Fam.Id <- "Small"
+combi$Fam.Id <- as.factor(combi$Fam.Id)
+```
+
+Before we split train and test data sets, let's do two things: at instances where Age is NA, fill in the average Age; and add an additional Child factor we have used before.  
+
+```{r}
+## add average age to NAs
+combiYesAge <- combi[!is.na(combi$Age),]
+combi[is.na(combi$Age),"Age"] <- mean(combiYesAge$Age)
+## add Child factor
+combi$Child <- 0
+combi[combi$Age < 15,]$Child <- 1
+```
+
+Now let's separate test and training data sets.   
+
+```{r}
+train <- combi[1:891,]
+test <- combi[892:nrow(combi),]
+```
+
+#### Round 5 submission.  
+Do another rpart fit with new factors.  
+
+```{r, fig.height=4, fig.width=6}
+fit <- rpart(Survived ~ Pclass + Sex + Age + Child + SibSp + Parch + Fare + Embarked
+             + Title + Fam.Size + Fam.Id, 
+             data=train, method="class",
+             control=rpart.control(minisplit=3))
+fancyRpartPlot(fit)
+Prediction <- predict(fit, test, type = "class")
+result5 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result5, "result5.csv", row.names=F)
+```
+
+#### Round 5 submission result.  
+Score improved by 0.01914, accuracy at 0.80383.  
 
 
 
