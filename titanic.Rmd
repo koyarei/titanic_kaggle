@@ -527,13 +527,14 @@ Did not improve; accuracy dropped to 0.77512.
 
 Use conditional Random Forest.  
 
-```{r, cache=TRUE}
+```{r, cache=TRUE, fig.width=6, fig.width=4}
 ##install.packages("party")
 library(party)
 set.seed(12)
 treeFit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch
                    + Fare + Embarked + Title + Fam.Size + Fam.Id,
                    data=train, controls=cforest_unbiased(ntree=2000, mtry=3))
+
 Prediction <- predict(treeFit, test, OOB=TRUE, type="response")
 result8 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
 write.csv(result8, file="result8.csv", row.names=FALSE)
@@ -542,6 +543,373 @@ write.csv(result8, file="result8.csv", row.names=FALSE)
 
 #### Round 8 submission result  
 Score did not improve from the best entry (0.80383).  
+
+### Cross-Validation  
+
+We will use some cross-validation techniques to examine our model performance before submission. Models will be applied on training datasets, and accuracy will be measured.  
+
+First, with cross-validation, let's examine the average accuracy of our last rpart model, the one produced 0.80383 accuracy.  
+
+```{r, cache=TRUE}
+##install.packagess("ROCR")
+library(ROCR)
+##install.packages("gbm")
+library(gbm)
+
+k=10
+n = floor(nrow(train)/k)
+errvect1 <- c()
+resultRpart <- as.numeric()
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    fit <- rpart(Survived ~ Pclass + Sex + Age + Child + SibSp + Parch + Fare + Embarked
+             + Title + Fam.Size + Fam.Id, 
+             data=cv.train, method="class",
+             control=rpart.control(minisplit=3))
+    
+    fit.pr <- predict(fit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(fit.pr, cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    #abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect1[i] <- auc
+    print(paste("AUC for fold: ", i, errvect1[i]))
+    resultRpart <- c(resultRpart, errvect1[i])
+}
+print(paste("Avg AUC: ", mean(errvect1)))
+meanRpart <- mean(errvect1)
+t.test(resultRpart - resultRForestNew)
+
+```
+
+How about the Conditional Random Forest, the one received the same score? Let's modify the above code slightly.  
+
+```{r, cache=TRUE}
+k=10
+n = floor(nrow(train)/k)
+errvect2 <- c()
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    treeFit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch
+                   + Fare + Embarked + Title + Fam.Size + Fam.Id,
+                   data=cv.train, controls=cforest_unbiased(ntree=2000, mtry=3))
+    fit.pr <- predict(treeFit, cv.test, OOB=TRUE, type="response")
+    
+    ##fit.pr <- predict(fit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(as.integer(fit.pr), cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect2[i] <- auc
+    print(paste("AUC for fold: ", i, errvect2[i]))
+}
+print(paste("Avg AUC: ", mean(errvect2)))
+meanCForest <- mean(errvect2)    
+## this line is unreproducible as I don't want to rerun the calculation a
+resultCForest <- c(0.808974358974359, 0.838768115942029,
+                   0.761904761904762, 0.832323232323232,
+                   0.834199584199584, 0.797619047619048,
+                   0.793333333333333, 0.730537280701754,
+                   0.816101694915254, 0.836898395721925)
+
+
+```
+
+The real world prediction result from those two models were the same, meaning the difference we see in cross-validation may be caused by a variety of factors. Let's calculate the p-value based on the null hypothesis that the accuracy of those two models should be the same.  
+H0: there is no difference in prediction accuracy betwen the rpart model and cforest model we used;  
+H1: there is difference in prediction accuracy between those two models.  
+
+```{r}
+t.test(resultRpart - resultCForest)$p.value
+t.test(resultRpart - resultCForest)$conf
+
+```
+
+Interestingly, the p-value is <0.05, and both confidence intervals are above zero -- theoretically speaking, the rpart model should be better than cforest. The null hypothesis is rejected. The actual result indifference may be caused by randomness.  
+
+What about the Random Forest we used earlier, the one produced 0.77512 accuracy -- is it a model that may look good on paper but performs poorly in practice too?  
+
+```{r, cache=TRUE}
+errvect3 <- c()
+resultRForest <- as.numeric()
+
+train <- train[sample(nrow(train)), ]
+test <- test[sample(nrow(test)), ]
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2, data=cv.train, importance=TRUE, ntree=2000)
+    
+    fit.pr <- predict(treeFit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(fit.pr, cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    #abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect3[i] <- auc
+    print(paste("AUC for fold: ", i, errvect3[i]))
+    resultRForest <- c(resultRForest, errvect3[i])
+}
+print(paste("Avg AUC: ", mean(errvect3)))
+meanRForest <- mean(errvect3)   
+```
+
+Let's do a t.test. From initial look, the Random Forest model we used earlier should theoretically outperform the rpart model. But, reality is different.  
+
+```{r}
+t.test(resultRForest - resultRpart)$p.value
+t.test(resultRForest - resultRpart)$conf
+```
+
+Well, yes, on paper, the Random Forest performed much better than rpart on training data, but failed on test data. 
+
+### Feature Engineering Pt. 2 -- Cabin Letter  
+
+Majority of the Cabin information is missing, let's use rpart to predict the rest of the passengers' Cabin initials.  
+
+```{r,cache=TRUE,fig.width=6,fig.height=4}
+combi$Cabin.Letter <- substr(combi$Cabin, 1,1)
+combi$Cabin.Letter <- as.factor(as.character(combi$Cabin.Letter))
+noCabin <- combi[combi$Cabin == "",]
+hasCabin <- combi[combi$Cabin != "",]
+
+cabinFit <- rpart(Cabin.Letter ~ Pclass + Sex + SibSp + Parch + Fare + Embarked
+             + Title, 
+             data=hasCabin)
+fancyRpartPlot(cabinFit)
+predict(cabinFit, noCabin, type="class")
+combi[combi$Cabin == "",]$Cabin.Letter <- predict(cabinFit, noCabin, type="class")
+```
+
+Now we have predicted the Cabin Letter for all passengers, time to pass that info into another Random Forest model.  
+
+```{r, cache=TRUE}
+train <- combi[1:891,]
+test <- combi[892:nrow(combi),]
+
+k = 10
+n = floor(nrow(train)/k)
+errvect5 <- c()
+resultRForestCabin <- as.numeric()
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2 + Cabin.Letter, data=cv.train, importance=TRUE, ntree=2000)
+    
+    fit.pr <- predict(treeFit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(fit.pr, cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    #abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect5[i] <- auc
+    print(paste("AUC for fold: ", i, errvect5[i]))
+    resultRForestCabin <- c(resultRForestCabin, errvect5[i])
+}
+print(paste("Avg AUC: ", mean(errvect5)))
+
+t.test(resultRForestCabin - resultRForest)
+
+```
+
+Did not see significant improvement from cross-validation test, but let's make a submission to see actual result.  
+
+#### Round 9 submission  
+
+```{r}
+
+treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2 + Cabin.Letter, data=train, importance=TRUE, ntree=2000)
+Prediction <- predict(treeFit, test)
+result9 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result9, file="result9.csv", row.names=FALSE)
+```
+
+#### Round 9 submission result  
+
+Score did not improve, at 0.77512.  
+
+Seems like Cabin.Letter carries certain importance, let's create a new class that combines factors ralated to Cabin.Letter -- Pclass.  
+
+```{r}
+
+combi$Wealth <- paste0(combi$Cabin.Letter, combi$Pclass)
+combi$Wealth <- as.factor(combi$Wealth)
+
+train <- combi[1:891,]
+test <- combi[892:nrow(combi),]
+
+k = 10
+n = floor(nrow(train)/k)
+errvect5 <- c()
+resultRForestCabin <- as.numeric()
+
+## randomnize rows
+train <- train[sample(nrow(train)), ]
+test <- test[sample(nrow(test)), ]
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size + Wealth
+                    + Fam.Id2 + Cabin.Letter, data=cv.train, importance=TRUE, ntree=2000)
+    
+    fit.pr <- predict(treeFit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(fit.pr, cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    #abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect5[i] <- auc
+    print(paste("AUC for fold: ", i, errvect5[i]))
+    resultRForestCabin <- c(resultRForestCabin, errvect5[i])
+}
+print(paste("Avg AUC: ", mean(errvect5)))
+
+t.test(resultRForestCabin - resultRForest)
+```
+
+
+#### Round 10 submission  
+
+Alright, let's try again.   
+
+```{r, cache=TRUE,fig.width=6,fig.height=4}
+
+treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2 + Cabin.Letter + Wealth, data=train, 
+                    importance=TRUE, ntree=2000)
+varImpPlot(treeFit)
+## glad to see Wealth, the new feature we introduced, is actually pretty important
+Prediction <- predict(treeFit, test)
+result10 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result10, file="result10.csv", row.names=FALSE)
+
+```
+
+#### Round 10 submission result  
+
+Nope, dropped even lower -- 0.76555.  
+
+
+#### Round 11 submission 
+
+Remove some less important features.  
+
+```{r, cache=TRUE,fig.width=6,fig.height=4}
+
+treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age+
+                    Fare + Title + Fam.Size 
+                     + Wealth, data=train, 
+                    importance=TRUE, ntree=2000)
+varImpPlot(treeFit)
+## glad to see Wealth, the new feature we introduced, is actually pretty important
+Prediction <- predict(treeFit, test)
+result11 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result11, file="result11.csv", row.names=FALSE)
+
+```
+
+#### Round 11 submission result  
+
+Did not improve, at 0.78469.  
+
+#### Round 12 submission 
+
+Add Fam.Id with cforest.
+
+```{r, cache=TRUE,fig.width=6,fig.height=4}
+treeFit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age
+                   + Fare + Title + Fam.Id + Wealth,
+                   data=train, controls=cforest_unbiased(ntree=2000, mtry=3))
+##varimp(treeFit)
+Prediction <- predict(treeFit, test, OOB=TRUE, type="response")
+result12 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result12, file="result12.csv", row.names=FALSE)
+
+```
+
+#### Round 12 submission result   
+
+At 0.79904.  
+
+
+```{r, cache=TRUE}
+nTrees5.100 <- data.frame(ntrees=as.integer(), prob=as.numeric())
+
+for (i in seq(5,100, by=10)) {
+    ##result <- crossValidate(10, i)
+    ##print(paste(i, " trees: ", result))
+    tempData <- data.frame(ntrees=as.integer(), prob=as.numeric())
+    tempData[1,1] <- i
+    tempData[1, 2] <- crossValidate(i)
+    nTrees5.100 <- rbind(nTrees5.100, tempData)
+    print(nTrees5.100)
+    
+}
+
+```
+
+
+
+
+
+
 
 
 

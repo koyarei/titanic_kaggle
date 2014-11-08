@@ -1105,6 +1105,7 @@ set.seed(12)
 treeFit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch
                    + Fare + Embarked + Title + Fam.Size + Fam.Id,
                    data=train, controls=cforest_unbiased(ntree=2000, mtry=3))
+
 Prediction <- predict(treeFit, test, OOB=TRUE, type="response")
 result8 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
 write.csv(result8, file="result8.csv", row.names=FALSE)
@@ -1112,6 +1113,720 @@ write.csv(result8, file="result8.csv", row.names=FALSE)
 
 #### Round 8 submission result  
 Score did not improve from the best entry (0.80383).  
+
+### Cross-Validation  
+
+We will use some cross-validation techniques to examine our model performance before submission. Models will be applied on training datasets, and accuracy will be measured.  
+
+First, with cross-validation, let's examine the average accuracy of our last rpart model, the one produced 0.80383 accuracy.  
+
+
+```r
+##install.packagess("ROCR")
+library(ROCR)
+##install.packages("gbm")
+library(gbm)
+
+k=10
+n = floor(nrow(train)/k)
+errvect1 <- c()
+resultRpart <- as.numeric()
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    fit <- rpart(Survived ~ Pclass + Sex + Age + Child + SibSp + Parch + Fare + Embarked
+             + Title + Fam.Size + Fam.Id, 
+             data=cv.train, method="class",
+             control=rpart.control(minisplit=3))
+    
+    fit.pr <- predict(fit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(fit.pr, cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    #abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect1[i] <- auc
+    print(paste("AUC for fold: ", i, errvect1[i]))
+    resultRpart <- c(resultRpart, errvect1[i])
+}
+```
+
+```
+## [1] "AUC for fold:  1 0.840512820512821"
+## [1] "AUC for fold:  2 0.868115942028985"
+## [1] "AUC for fold:  3 0.793831168831169"
+## [1] "AUC for fold:  4 0.848989898989899"
+## [1] "AUC for fold:  5 0.825363825363825"
+## [1] "AUC for fold:  6 0.809253246753247"
+## [1] "AUC for fold:  7 0.776923076923077"
+## [1] "AUC for fold:  8 0.774122807017544"
+## [1] "AUC for fold:  9 0.864406779661017"
+## [1] "AUC for fold:  10 0.855614973262032"
+```
+
+```r
+print(paste("Avg AUC: ", mean(errvect1)))
+```
+
+```
+## [1] "Avg AUC:  0.825713453934362"
+```
+
+```r
+meanRpart <- mean(errvect1)
+t.test(resultRpart - resultRForestNew)
+```
+
+```
+## 
+## 	One Sample t-test
+## 
+## data:  resultRpart - resultRForestNew
+## t = -3.2471, df = 9, p-value = 0.01004
+## alternative hypothesis: true mean is not equal to 0
+## 95 percent confidence interval:
+##  -0.08323171 -0.01487993
+## sample estimates:
+##   mean of x 
+## -0.04905582
+```
+
+How about the Conditional Random Forest, the one received the same score? Let's modify the above code slightly.  
+
+
+```r
+k=10
+n = floor(nrow(train)/k)
+errvect2 <- c()
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    treeFit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age + SibSp + Parch
+                   + Fare + Embarked + Title + Fam.Size + Fam.Id,
+                   data=cv.train, controls=cforest_unbiased(ntree=2000, mtry=3))
+    fit.pr <- predict(treeFit, cv.test, OOB=TRUE, type="response")
+    
+    ##fit.pr <- predict(fit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(as.integer(fit.pr), cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect2[i] <- auc
+    print(paste("AUC for fold: ", i, errvect2[i]))
+}
+```
+
+```
+## Error in int_abline(a = a, b = b, h = h, v = v, untf = untf, ...): plot.new has not been called yet
+```
+
+```r
+print(paste("Avg AUC: ", mean(errvect2)))
+```
+
+```
+## Warning in mean.default(errvect2): argument is not numeric or logical:
+## returning NA
+```
+
+```
+## [1] "Avg AUC:  NA"
+```
+
+```r
+meanCForest <- mean(errvect2)    
+```
+
+```
+## Warning in mean.default(errvect2): argument is not numeric or logical:
+## returning NA
+```
+
+```r
+## this line is unreproducible as I don't want to rerun the calculation a
+resultCForest <- c(0.808974358974359, 0.838768115942029,
+                   0.761904761904762, 0.832323232323232,
+                   0.834199584199584, 0.797619047619048,
+                   0.793333333333333, 0.730537280701754,
+                   0.816101694915254, 0.836898395721925)
+```
+
+The real world prediction result from those two models were the same, meaning the difference we see in cross-validation may be caused by a variety of factors. Let's calculate the p-value based on the null hypothesis that the accuracy of those two models should be the same.  
+H0: there is no difference in prediction accuracy betwen the rpart model and cforest model we used;  
+H1: there is difference in prediction accuracy between those two models.  
+
+
+```r
+t.test(resultRpart - resultCForest)$p.value
+```
+
+```
+## [1] 0.01243219
+```
+
+```r
+t.test(resultRpart - resultCForest)$conf
+```
+
+```
+## [1] 0.005649653 0.035645294
+## attr(,"conf.level")
+## [1] 0.95
+```
+
+Interestingly, the p-value is <0.05, and both confidence intervals are above zero -- theoretically speaking, the rpart model should be better than cforest. The null hypothesis is rejected. The actual result indifference may be caused by randomness.  
+
+What about the Random Forest we used earlier, the one produced 0.77512 accuracy -- is it a model that may look good on paper but performs poorly in practice too?  
+
+
+```r
+errvect3 <- c()
+resultRForest <- as.numeric()
+
+train <- train[sample(nrow(train)), ]
+test <- test[sample(nrow(test)), ]
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2, data=cv.train, importance=TRUE, ntree=2000)
+    
+    fit.pr <- predict(treeFit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(fit.pr, cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    #abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect3[i] <- auc
+    print(paste("AUC for fold: ", i, errvect3[i]))
+    resultRForest <- c(resultRForest, errvect3[i])
+}
+```
+
+```
+## [1] "AUC for fold:  1 0.815561224489796"
+## [1] "AUC for fold:  2 0.854420731707317"
+## [1] "AUC for fold:  3 0.884199134199134"
+## [1] "AUC for fold:  4 0.87987012987013"
+## [1] "AUC for fold:  5 0.917359667359667"
+## [1] "AUC for fold:  6 0.858021390374331"
+## [1] "AUC for fold:  7 0.92825361512792"
+## [1] "AUC for fold:  8 0.879885057471265"
+## [1] "AUC for fold:  9 0.880978865406007"
+## [1] "AUC for fold:  10 0.857954545454545"
+```
+
+```r
+print(paste("Avg AUC: ", mean(errvect3)))
+```
+
+```
+## [1] "Avg AUC:  0.875650436146011"
+```
+
+```r
+meanRForest <- mean(errvect3)   
+```
+
+Let's do a t.test. From initial look, the Random Forest model we used earlier should theoretically outperform the rpart model. But, reality is different.  
+
+
+```r
+t.test(resultRForest - resultRpart)$p.value
+```
+
+```
+## [1] 0.02337598
+```
+
+```r
+t.test(resultRForest - resultRpart)$conf
+```
+
+```
+## [1] 0.008497473 0.091376491
+## attr(,"conf.level")
+## [1] 0.95
+```
+
+Well, yes, on paper, the Random Forest performed much better than rpart on training data, but failed on test data. 
+
+### Feature Engineering Pt. 2 -- Cabin Letter  
+
+Majority of the Cabin information is missing, let's use rpart to predict the rest of the passengers' Cabin initials.  
+
+
+```r
+combi$Cabin.Letter <- substr(combi$Cabin, 1,1)
+combi$Cabin.Letter <- as.factor(as.character(combi$Cabin.Letter))
+noCabin <- combi[combi$Cabin == "",]
+hasCabin <- combi[combi$Cabin != "",]
+
+cabinFit <- rpart(Cabin.Letter ~ Pclass + Sex + SibSp + Parch + Fare + Embarked
+             + Title, 
+             data=hasCabin)
+fancyRpartPlot(cabinFit)
+```
+
+![plot of chunk unnamed-chunk-41](figure/unnamed-chunk-41-1.png) 
+
+```r
+predict(cabinFit, noCabin, type="class")
+```
+
+```
+##    1    3    5    6    8    9   10   13   14   15   16   17   18   19   20 
+##    F    F    F    F    F    G    F    F    F    F    D    F    D    D    F 
+##   21   23   25   26   27   29   30   31   33   34   35   36   37   38   39 
+##    F    F    F    F    F    F    F    C    F    F    B    C    F    F    D 
+##   40   41   42   43   44   45   46   47   48   49   50   51   52   54   57 
+##    F    F    F    F    F    F    F    D    F    F    D    F    F    F    F 
+##   58   59   60   61   64   65   66   68   69   70   71   72   73   74   75 
+##    F    F    F    F    F    C    G    F    G    F    F    F    F    D    F 
+##   77   78   79   80   81   82   83   84   85   86   87   88   90   91   92 
+##    F    F    F    F    F    F    F    C    F    D    F    F    F    F    F 
+##   94   95   96   99  100  101  102  104  105  106  107  108  109  110  112 
+##    F    F    F    F    F    F    F    F    F    F    F    F    F    F    D 
+##  113  114  115  116  117  118  120  121  122  123  126  127  128  130  131 
+##    F    F    D    F    F    F    F    F    F    F    F    F    F    F    F 
+##  132  133  134  135  136  139  141  142  143  144  145  146  147  148  150 
+##    F    D    F    D    D    F    G    F    D    F    F    F    F    F    D 
+##  151  153  154  155  156  157  158  159  160  161  162  163  164  165  166 
+##    F    F    G    F    B    F    F    F    F    G    D    F    F    F    F 
+##  168  169  170  172  173  174  176  177  179  180  181  182  183  185  187 
+##    F    E    F    F    G    F    G    F    D    F    F    D    F    F    D 
+##  188  189  190  191  192  193  197  198  199  200  201  202  203  204  205 
+##    C    G    F    D    D    F    F    G    F    D    F    F    F    F    F 
+##  207  208  209  211  212  213  214  215  217  218  220  221  222  223  224 
+##    D    D    F    F    F    F    D    F    F    F    F    F    D    F    F 
+##  226  227  228  229  230  232  233  234  235  236  237  238  239  240  241 
+##    F    F    F    D    F    F    D    F    F    F    F    F    F    F    D 
+##  242  243  244  245  247  248  250  251  254  255  256  257  259  260  261 
+##    D    F    F    F    F    G    F    F    D    F    G    B    B    F    F 
+##  262  265  266  267  268  271  272  273  275  277  278  279  280  281  282 
+##    F    F    F    F    F    C    F    G    F    F    F    F    F    F    F 
+##  283  284  286  287  288  289  290  291  294  295  296  297  301  302  303 
+##    F    F    F    F    F    D    F    D    F    F    C    F    F    F    F 
+##  305  307  309  313  314  315  316  317  318  321  322  323  324  325  327 
+##    F    C    F    F    F    F    F    F    D    F    F    F    F    F    F 
+##  329  331  334  335  336  339  343  344  345  347  348  349  350  351  353 
+##    F    F    D    B    F    F    D    D    D    D    D    G    F    F    G 
+##  354  355  356  358  359  360  361  362  363  364  365  366  368  369  372 
+##    D    F    F    D    F    F    F    F    G    F    D    F    F    F    F 
+##  373  374  375  376  377  379  380  381  382  383  384  385  386  387  388 
+##    F    C    F    B    F    F    F    C    G    F    C    F    F    F    D 
+##  389  390  392  393  396  397  398  399  400  401  402  403  404  405  406 
+##    F    F    F    F    F    F    F    F    D    F    F    F    D    F    F 
+##  407  408  409  410  411  412  414  415  416  417  418  419  420  421  422 
+##    F    G    F    F    F    F    F    F    F    F    G    D    F    F    F 
+##  423  424  425  426  427  428  429  432  433  434  437  438  440  441  442 
+##    F    G    F    F    F    F    F    D    F    F    F    G    F    F    F 
+##  443  444  445  447  448  449  451  452  455  456  459  460  462  464  465 
+##    F    D    F    G    C    G    F    F    F    F    F    F    F    D    F 
+##  466  467  468  469  470  471  472  473  475  477  478  479  480  481  482 
+##    F    F    C    F    G    F    F    F    F    F    F    F    G    F    F 
+##  483  484  486  489  490  491  492  494  495  496  498  500  501  502  503 
+##    F    F    F    F    G    F    F    A    F    D    D    F    F    F    F 
+##  504  507  508  509  510  511  512  514  515  518  519  520  522  523  525 
+##    F    F    C    F    F    F    F    C    F    F    F    F    F    F    F 
+##  526  527  529  530  531  532  533  534  535  536  538  539  542  543  544 
+##    F    F    F    G    F    F    G    F    F    F    C    D    F    F    F 
+##  546  547  548  549  550  552  553  554  555  556  558  560  561  562  563 
+##    E    F    D    F    F    F    F    F    F    C    C    D    F    F    D 
+##  564  565  566  567  568  569  570  571  574  575  576  577  579  580  581 
+##    F    F    F    F    F    F    F    F    F    F    D    D    D    F    F 
+##  583  585  587  589  590  591  593  594  595  596  597  598  599  601  602 
+##    F    F    D    F    F    F    F    G    F    F    F    F    F    F    F 
+##  603  604  605  606  607  608  609  611  612  613  614  615  616  617  618 
+##    C    F    C    D    F    C    F    F    F    D    F    F    F    G    D 
+##  620  621  623  624  625  627  629  630  632  634  635  636  637  638  639 
+##    F    D    G    F    D    F    F    F    F    B    F    D    F    F    F 
+##  640  641  643  644  645  647  649  650  651  652  653  654  655  656  657 
+##    D    F    F    F    G    F    F    F    F    F    F    F    F    F    F 
+##  658  659  661  662  664  665  666  667  668  669  671  673  674  675  676 
+##    G    D    B    F    F    F    F    D    F    F    F    F    D    F    F 
+##  677  678  679  681  683  684  685  686  687  688  689  692  693  694  695 
+##    F    F    F    F    F    F    F    F    F    F    F    G    F    F    C 
+##  696  697  698  703  704  705  706  707  709  710  714  715  719  720  721 
+##    D    F    F    G    F    F    F    D    C    G    F    D    D    F    F 
+##  722  723  724  726  727  728  729  730  732  733  734  735  736  737  739 
+##    F    D    D    F    F    F    F    F    D    F    D    D    D    F    F 
+##  740  744  745  747  748  750  751  753  754  755  756  757  758  759  761 
+##    F    D    F    F    D    F    F    F    F    F    G    F    F    F    D 
+##  762  763  765  767  768  769  770  771  772  774  775  776  778  779  781 
+##    F    F    F    A    F    F    F    F    F    F    F    F    F    F    F 
+##  784  785  786  787  788  789  791  792  793  794  795  796  798  799  800 
+##    F    F    F    F    F    F    F    F    F    A    F    D    F    F    F 
+##  801  802  804  805  806  808  809  811  812  813  814  815  817  818  819 
+##    D    F    G    F    F    F    D    F    F    F    F    F    F    F    F 
+##  820  822  823  825  826  827  828  829  831  832  833  834  835  837  838 
+##    F    F    B    F    F    F    F    F    D    G    F    F    F    F    F 
+##  839  841  842  843  844  845  846  847  848  849  851  852  853  855  856 
+##    F    F    F    A    F    F    F    F    F    F    F    F    G    F    G 
+##  857  859  860  861  862  864  865  866  867  869  870  871  874  875  876 
+##    C    G    F    D    F    F    D    D    D    F    G    F    F    F    F 
+##  877  878  879  881  882  883  884  885  886  887  889  891  892  893  894 
+##    F    F    F    F    F    F    F    F    F    D    F    F    F    F    F 
+##  895  896  897  898  899  900  901  902  903  905  907  908  909  910  911 
+##    F    G    F    F    F    F    F    F    E    F    F    F    F    F    F 
+##  912  913  914  915  917  919  921  922  923  924  925  927  928  929  930 
+##    C    G    C    B    D    F    F    F    F    F    F    F    F    F    F 
+##  931  932  934  935  937  939  941  943  944  946  947  948  950  952  953 
+##    F    G    F    D    F    F    G    D    F    D    F    F    D    F    D 
+##  954  955  957  958  959  962  963  964  968  970  971  972  974  975  976 
+##    F    F    F    F    C    F    F    F    F    D    F    G    E    F    F 
+##  977  978  979  980  981  982  983  985  986  987  989  990  991  993  994 
+##    D    F    F    F    F    D    F    F    C    F    F    F    F    F    F 
+##  995  996  997  998  999 1000 1002 1003 1005 1007 1008 1011 1012 1013 1015 
+##    F    G    F    F    F    F    D    F    F    D    F    F    D    F    F 
+## 1016 1017 1018 1019 1020 1021 1022 1024 1025 1026 1027 1028 1029 1030 1031 
+##    F    G    F    F    D    F    F    F    F    F    F    F    D    F    F 
+## 1032 1033 1035 1036 1037 1039 1040 1041 1043 1044 1045 1046 1047 1049 1051 
+##    F    C    F    C    D    F    C    F    F    F    G    F    F    F    G 
+## 1052 1053 1054 1055 1056 1057 1059 1060 1061 1062 1063 1064 1065 1066 1067 
+##    F    G    D    F    D    F    F    C    F    F    F    D    F    F    F 
+## 1068 1072 1075 1077 1078 1079 1080 1081 1082 1083 1084 1085 1086 1087 1089 
+##    F    D    F    D    F    F    F    D    F    E    G    F    F    F    F 
+## 1090 1091 1092 1093 1095 1096 1097 1098 1099 1101 1102 1103 1104 1105 1106 
+##    F    F    D    G    F    F    C    F    F    F    F    F    F    F    G 
+## 1108 1109 1111 1112 1113 1115 1116 1117 1118 1119 1120 1121 1122 1123 1124 
+##    F    C    F    D    F    F    C    G    F    F    D    D    F    C    F 
+## 1125 1127 1129 1130 1132 1133 1135 1136 1138 1139 1140 1141 1142 1143 1145 
+##    F    F    F    G    C    F    F    F    F    F    F    D    F    F    F 
+## 1146 1147 1148 1149 1150 1151 1152 1153 1154 1155 1156 1157 1158 1159 1160 
+##    F    F    F    F    D    F    D    F    F    G    D    F    B    F    F 
+## 1161 1163 1165 1166 1167 1168 1169 1170 1171 1172 1173 1174 1175 1176 1177 
+##    F    F    D    F    F    F    F    F    F    F    G    F    G    F    F 
+## 1178 1181 1182 1183 1184 1186 1187 1188 1189 1190 1191 1192 1194 1195 1196 
+##    F    F    C    F    F    F    F    F    F    C    F    F    F    F    F 
+## 1199 1201 1202 1203 1204 1205 1207 1209 1210 1211 1212 1215 1216 1217 1219 
+##    G    D    F    F    F    F    F    F    F    F    F    C    C    F    B 
+## 1220 1221 1222 1224 1225 1226 1228 1229 1230 1231 1232 1233 1234 1236 1237 
+##    F    D    F    F    G    F    D    G    F    F    F    F    F    G    F 
+## 1238 1239 1240 1241 1243 1244 1245 1246 1249 1250 1251 1252 1253 1254 1255 
+##    D    F    D    F    F    F    F    F    F    F    D    F    F    F    F 
+## 1257 1258 1259 1260 1261 1262 1265 1267 1268 1269 1271 1272 1273 1274 1275 
+##    F    D    F    B    D    F    D    B    F    F    F    F    F    D    D 
+## 1276 1277 1278 1279 1280 1281 1284 1285 1286 1288 1290 1291 1293 1294 1295 
+##    D    F    F    D    F    F    F    F    F    F    F    F    F    B    C 
+## 1298 1300 1301 1302 1304 1305 1307 1308 1309 
+##    F    F    G    F    F    F    F    F    F 
+## Levels:  A B C D E F G T
+```
+
+```r
+combi[combi$Cabin == "",]$Cabin.Letter <- predict(cabinFit, noCabin, type="class")
+```
+
+Now we have predicted the Cabin Letter for all passengers, time to pass that info into another Random Forest model.  
+
+
+```r
+train <- combi[1:891,]
+test <- combi[892:nrow(combi),]
+
+k = 10
+n = floor(nrow(train)/k)
+errvect5 <- c()
+resultRForestCabin <- as.numeric()
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2 + Cabin.Letter, data=cv.train, importance=TRUE, ntree=2000)
+    
+    fit.pr <- predict(treeFit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(fit.pr, cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    #abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect5[i] <- auc
+    print(paste("AUC for fold: ", i, errvect5[i]))
+    resultRForestCabin <- c(resultRForestCabin, errvect5[i])
+}
+```
+
+```
+## [1] "AUC for fold:  1 0.843846153846154"
+## [1] "AUC for fold:  2 0.843840579710145"
+## [1] "AUC for fold:  3 0.798160173160173"
+## [1] "AUC for fold:  4 0.871464646464646"
+## [1] "AUC for fold:  5 0.896569646569647"
+## [1] "AUC for fold:  6 0.897186147186147"
+## [1] "AUC for fold:  7 0.864102564102564"
+## [1] "AUC for fold:  8 0.906798245614035"
+## [1] "AUC for fold:  9 0.919774011299435"
+## [1] "AUC for fold:  10 0.895454545454546"
+```
+
+```r
+print(paste("Avg AUC: ", mean(errvect5)))
+```
+
+```
+## [1] "Avg AUC:  0.873719671340749"
+```
+
+```r
+t.test(resultRForestCabin - resultRForest)
+```
+
+```
+## 
+## 	One Sample t-test
+## 
+## data:  resultRForestCabin - resultRForest
+## t = -0.1363, df = 9, p-value = 0.8946
+## alternative hypothesis: true mean is not equal to 0
+## 95 percent confidence interval:
+##  -0.03398034  0.03011881
+## sample estimates:
+##    mean of x 
+## -0.001930765
+```
+
+Did not see significant improvement from cross-validation test, but let's make a submission to see actual result.  
+
+#### Round 9 submission  
+
+
+```r
+treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2 + Cabin.Letter, data=train, importance=TRUE, ntree=2000)
+Prediction <- predict(treeFit, test)
+result9 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result9, file="result9.csv", row.names=FALSE)
+```
+
+#### Round 9 submission result  
+
+Score did not improve, at 0.77512.  
+
+Seems like Cabin.Letter carries certain importance, let's create a new class that combines factors ralated to Cabin.Letter -- Pclass.  
+
+
+```r
+combi$Wealth <- paste0(combi$Cabin.Letter, combi$Pclass)
+combi$Wealth <- as.factor(combi$Wealth)
+
+train <- combi[1:891,]
+test <- combi[892:nrow(combi),]
+
+k = 10
+n = floor(nrow(train)/k)
+errvect5 <- c()
+resultRForestCabin <- as.numeric()
+
+## randomnize rows
+train <- train[sample(nrow(train)), ]
+test <- test[sample(nrow(test)), ]
+
+for(i in 1:10) {
+    s1 = (i - 1) * n + 1
+    s2 = i * n
+    subset = s1:s2
+    cv.train = train[-subset,]
+    cv.test = train[subset,]
+    
+    treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size + Wealth
+                    + Fam.Id2 + Cabin.Letter, data=cv.train, importance=TRUE, ntree=2000)
+    
+    fit.pr <- predict(treeFit, cv.test, type="prob")[,2]
+    fit.pred <- prediction(fit.pr, cv.test[,2])
+    ##fit.perf <- performance(fit.pred, "prec", "rec")
+    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    
+    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
+    #abline(a=0, b=1, lwd=2, lty=2, col="gray")
+    auc <- performance(fit.pred, "auc")
+    auc <- unlist(slot(auc, "y.values"))
+    errvect5[i] <- auc
+    print(paste("AUC for fold: ", i, errvect5[i]))
+    resultRForestCabin <- c(resultRForestCabin, errvect5[i])
+}
+```
+
+```
+## [1] "AUC for fold:  1 0.988290398126464"
+## [1] "AUC for fold:  2 0.837068965517241"
+## [1] "AUC for fold:  3 0.873353596757852"
+## [1] "AUC for fold:  4 0.770897832817337"
+## [1] "AUC for fold:  5 0.907754010695187"
+## [1] "AUC for fold:  6 0.844350282485876"
+## [1] "AUC for fold:  7 0.858887733887734"
+## [1] "AUC for fold:  8 0.906028368794327"
+## [1] "AUC for fold:  9 0.874304783092325"
+## [1] "AUC for fold:  10 0.861299435028248"
+```
+
+```r
+print(paste("Avg AUC: ", mean(errvect5)))
+```
+
+```
+## [1] "Avg AUC:  0.872223540720259"
+```
+
+```r
+t.test(resultRForestCabin - resultRForest)
+```
+
+```
+## 
+## 	One Sample t-test
+## 
+## data:  resultRForestCabin - resultRForest
+## t = -0.1486, df = 9, p-value = 0.8851
+## alternative hypothesis: true mean is not equal to 0
+## 95 percent confidence interval:
+##  -0.05558291  0.04872912
+## sample estimates:
+##    mean of x 
+## -0.003426895
+```
+
+
+#### Round 10 submission  
+
+Alright, let's try again.   
+
+
+```r
+treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
+                    + Parch + Fare + Embarked + Title + Fam.Size 
+                    + Fam.Id2 + Cabin.Letter + Wealth, data=train, 
+                    importance=TRUE, ntree=2000)
+varImpPlot(treeFit)
+```
+
+![plot of chunk unnamed-chunk-45](figure/unnamed-chunk-45-1.png) 
+
+```r
+## glad to see Wealth, the new feature we introduced, is actually pretty important
+Prediction <- predict(treeFit, test)
+result10 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result10, file="result10.csv", row.names=FALSE)
+```
+
+#### Round 10 submission result  
+
+Nope, dropped even lower -- 0.76555.  
+
+
+#### Round 11 submission 
+
+Remove some less important features.  
+
+
+```r
+treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age+
+                    Fare + Title + Fam.Size 
+                     + Wealth, data=train, 
+                    importance=TRUE, ntree=2000)
+varImpPlot(treeFit)
+```
+
+![plot of chunk unnamed-chunk-46](figure/unnamed-chunk-46-1.png) 
+
+```r
+## glad to see Wealth, the new feature we introduced, is actually pretty important
+Prediction <- predict(treeFit, test)
+result11 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result11, file="result11.csv", row.names=FALSE)
+```
+
+#### Round 11 submission result  
+
+Did not improve, at 0.78469.  
+
+#### Round 12 submission 
+
+Add Fam.Id with cforest.
+
+
+```r
+treeFit <- cforest(as.factor(Survived) ~ Pclass + Sex + Age
+                   + Fare + Title + Fam.Id + Wealth,
+                   data=train, controls=cforest_unbiased(ntree=2000, mtry=3))
+##varimp(treeFit)
+Prediction <- predict(treeFit, test, OOB=TRUE, type="response")
+result12 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result12, file="result12.csv", row.names=FALSE)
+```
+
+#### Round 12 submission result   
+
+At 0.79904.  
+
+
+
+```r
+nTrees5.100 <- data.frame(ntrees=as.integer(), prob=as.numeric())
+
+for (i in seq(5,100, by=10)) {
+    ##result <- crossValidate(10, i)
+    ##print(paste(i, " trees: ", result))
+    tempData <- data.frame(ntrees=as.integer(), prob=as.numeric())
+    tempData[1,1] <- i
+    tempData[1, 2] <- crossValidate(i)
+    nTrees5.100 <- rbind(nTrees5.100, tempData)
+    print(nTrees5.100)
+    
+}
+```
+
+```
+## Error in UseMethod("predict"): no applicable method for 'predict' applied to an object of class "c('double', 'numeric')"
+```
+
+
+
+
+
+
 
 
 
