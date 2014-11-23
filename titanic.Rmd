@@ -800,27 +800,35 @@ for(i in 1:10) {
     cv.train = train[-subset,]
     cv.test = train[subset,]
     
-    treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age + Child + SibSp
-                    + Parch + Fare + Embarked + Title + Fam.Size + Wealth
-                    + Fam.Id2 + Cabin.Letter, data=cv.train, importance=TRUE, ntree=2000)
+    treeFit <- randomForest(as.factor(Survived) ~  Age +
+                            Pclass + Title 
+                        + Wealth, data=cv.train, samplesize=c(10,20),classwt=c(20,10),
+                        importance=TRUE, ntree=2000)
     
     fit.pr <- predict(treeFit, cv.test, type="prob")[,2]
     fit.pred <- prediction(fit.pr, cv.test[,2])
-    ##fit.perf <- performance(fit.pred, "prec", "rec")
-    ##plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
+    #fit.perf <- performance(fit.pred, "prec", "rec")
+    #plot(fit.perf, main="PR Curve for Random Forest", col=2, lwd=2)
     
-    fit.perf <- performance(fit.pred, "tpr", "fpr")
+    
+    
+    #fit.perf <- performance(fit.pred, "tpr", "fpr")
     #plot(fit.perf, main="ROC Curve for Random Forest", col=2, lwd=2)
     #abline(a=0, b=1, lwd=2, lty=2, col="gray")
-    auc <- performance(fit.pred, "auc")
-    auc <- unlist(slot(auc, "y.values"))
-    errvect5[i] <- auc
+    
+    fit.perf <- performance(fit.pred, "acc")
+    acc <- unlist(slot(acc, "y.values"))
+    
+    #auc <- performance(fit.pred, "auc")
+    #auc <- unlist(slot(auc, "y.values"))
+    #errvect5[i] <- auc
+    errvect5[i] <- acc
     print(paste("AUC for fold: ", i, errvect5[i]))
     resultRForestCabin <- c(resultRForestCabin, errvect5[i])
 }
 print(paste("Avg AUC: ", mean(errvect5)))
 
-t.test(resultRForestCabin - resultRForest)
+##t.test(resultRForestCabin - resultRForest)
 ```
 
 
@@ -853,15 +861,24 @@ Remove some less important features.
 
 ```{r, cache=TRUE,fig.width=6,fig.height=4}
 
-treeFit <- randomForest(as.factor(Survived) ~ Pclass + Sex + Age+
-                    Fare + Title + Fam.Size 
-                     + Wealth, data=train, 
+treeFit <- randomForest(as.factor(Survived) ~ Sex + Age+
+                    Fare + Title
+                     + Wealth, data=train, classwt=c()
                     importance=TRUE, ntree=2000)
 varImpPlot(treeFit)
 ## glad to see Wealth, the new feature we introduced, is actually pretty important
 Prediction <- predict(treeFit, test)
 result11 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
 write.csv(result11, file="result11.csv", row.names=FALSE)
+
+### testing settings of Random Forest
+treeFit <- randomForest(as.factor(Survived) ~ Age +
+                    Fare + Title 
+                     + Wealth, data=train, samplesize=c(38,162),classwt=c(60,10),
+                    importance=TRUE, ntree=500)
+Prediction <- predict(treeFit, test)
+result14 <- data.frame(PassengerId = test$PassengerId, Survived = Prediction)
+write.csv(result14, file="result14.csv", row.names=FALSE)
 
 ```
 
